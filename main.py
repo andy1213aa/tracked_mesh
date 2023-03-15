@@ -5,6 +5,7 @@ from ml_collections import config_flags
 import train
 
 FLAGS = flags.FLAGS
+flags.DEFINE_string('workdir', None, 'Directory to store model data.')
 config_flags.DEFINE_config_file(
     'config',
     None,
@@ -13,8 +14,8 @@ config_flags.DEFINE_config_file(
 )
     
 def main(argv):
-    train()
+    train.train_and_evalutation(FLAGS.config, )
 
 if __name__ == '__main__':
-    flags.mark_flag_as_required(['config'])
+    flags.mark_flag_as_required(['config', 'workdir'])
     app.run(main)
