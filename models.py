@@ -1,7 +1,9 @@
+import jax
 import jax.numpy as jnp
 from flax import linen as nn
 from typing import Any, Callable, Sequence, Tuple
 from functools import partial
+import einops
 
 ModuleDef = Any
 
@@ -24,10 +26,18 @@ class CNN(nn.Module):
             x = nn.relu(x)
 
         # x = nn.Dropout(rate=0.2)(x, deterministic=not train)
-        x = nn.Dense(160)(x)
-        x = nn.Dense(self.mesh_vertexes)(x)
+        # x = einops.rearrange(x, 'b h w c -> b (h w c)')
+        x = jnp.reshape(x, (x.shape[0]* x.shape[1], -1))
         
-        return x
+        x = nn.Dense(160)(x)
+        
+        x_dim = nn.Dense(self.mesh_vertexes)(x)
+        y_dim = nn.Dense(self.mesh_vertexes)(x)
+        z_dim = nn.Dense(self.mesh_vertexes)(x)
+        
+        concat = jnp.stack([x_dim, y_dim, z_dim], axis=-1)
+        return jnp.reshape(concat, (jax.local_device_count(), -1)+ concat.shape[1:])
+        # return einops.rearrange(concat, '(p b) d c -> p b d c')
 
 
 Classic_CNN = partial(
@@ -36,4 +46,6 @@ Classic_CNN = partial(
     num_strides=[(2, 2), (1, 1), (2, 2), (1, 1), (2, 2), (1, 1), (2, 2),
                  (1, 1), (2, 2), (1, 1), (2, 2), (1, 1)])
 
-
+# Classic_CNN = partial(CNN,
+#                       num_filters=[64, 64, 96, 96],
+#                       num_strides=[(2, 2), (1, 1), (2, 2), (1, 1)])
