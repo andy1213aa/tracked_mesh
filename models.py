@@ -26,8 +26,7 @@ class CNN(nn.Module):
             x = nn.relu(x)
 
         # x = nn.Dropout(rate=0.2)(x, deterministic=not train)
-        # x = einops.rearrange(x, 'b h w c -> b (h w c)')
-        x = jnp.reshape(x, (x.shape[0]* x.shape[1], -1))
+        x = einops.rearrange(x, 'b h w c -> b (h w c)') 
         
         x = nn.Dense(160)(x)
         
@@ -36,7 +35,8 @@ class CNN(nn.Module):
         z_dim = nn.Dense(self.mesh_vertexes)(x)
         
         concat = jnp.stack([x_dim, y_dim, z_dim], axis=-1)
-        return jnp.reshape(concat, (jax.local_device_count(), -1)+ concat.shape[1:])
+        return concat
+        # return jnp.reshape(concat, (jax.local_device_count(), -1)+ concat.shape[1:])
         # return einops.rearrange(concat, '(p b) d c -> p b d c')
 
 

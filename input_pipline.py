@@ -15,9 +15,11 @@ def readTFRECORD(tfrecord_pth: str,
                  config: ml_collections.ConfigDict) -> tf.data:
     AUTOTUNE = tf.data.experimental.AUTOTUNE
     data_set = tf.data.TFRecordDataset(tfrecord_pth)
+    data_set = data_set.repeat()
     data_set = data_set.map(parse, num_parallel_calls=AUTOTUNE)
 
-    data_set = data_set.shuffle(config.shuffle, reshuffle_each_iteration=True)
+    data_set = data_set.shuffle(6000,
+                                reshuffle_each_iteration=True)
     data_batch = data_set.batch(config.batch_size, drop_remainder=True)
     data_batch = data_batch.prefetch(buffer_size=AUTOTUNE)
     return data_batch
