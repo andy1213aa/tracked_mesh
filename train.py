@@ -24,8 +24,6 @@ from typing import Any
 import optax
 import models
 
-VERTEXES = 7306
-steps_per_epoch = 8
 
 
 def prepare_tf_data(xs):
@@ -67,9 +65,10 @@ def restore_checkpoint(state, workdir):
 
 def save_checkpoint(state, workdir):
     if jax.process_index() == 0:
-        # get train state from the first replica
+        # orbax_checkpointer = orbax.checkpoint.PyTreeCheckpointer()
         state = jax.device_get(jax.tree_util.tree_map(lambda x: x[0], state))
         step = int(state.step)
+        # orbax_checkpointer.save(workdir, state, save_args=)
         checkpoints.save_checkpoint(workdir, state, step, keep=3)
 
 
@@ -93,9 +92,9 @@ class TrainState(train_state.TrainState):
     dynamic_scale: dynamic_scale_lib.DynamicScale
 
 
-def create_model(model_cls, **kwargs):
+def create_model(model_cls, config,**kwargs):
 
-    return model_cls(mesh_vertexes=VERTEXES, dtype=jnp.float32)
+    return model_cls(mesh_vertexes=config.vertex, dtype=jnp.float32)
 
 
 def create_learning_rate_fn(config: ml_collections.ConfigDict,
@@ -164,10 +163,8 @@ def train_and_evalutation(config: ml_collections.ConfigDict, workdir: str,
         logdir=workdir, just_logging=jax.process_index() != 0)
 
     rng = jrand.PRNGKey(0)
-    logging.info('fuck')
     ds = readTFRECORD(datadir, config)
-    steps_per_epoch = jnp.array(ds.reduce(0, lambda x, _: x + 1), dtype=jnp.float32)
-
+    steps_per_epoch = 1973
     steps_per_checkpoint = steps_per_epoch * 10
 
     train_iter = create_input_iter(ds)
@@ -178,7 +175,7 @@ def train_and_evalutation(config: ml_collections.ConfigDict, workdir: str,
         num_steps = config.num_train_steps
 
     model_cls = getattr(models, config.model)
-    model = create_model(model_cls)
+    model = create_model(model_cls, config)
 
     base_learning_rate = config.learning_rate * config.batch_size / 256.
 
@@ -210,8 +207,8 @@ def train_and_evalutation(config: ml_collections.ConfigDict, workdir: str,
 
     for step, batch in zip(range(step_offset, num_steps), train_iter):
 
-        # logging.info(step)
         state, metrics = p_train_step(state, batch)
+        
         for h in hooks:
             h(step)
         if step == step_offset:

@@ -2,11 +2,11 @@ import tensorflow as tf
 import numpy as np
 import ml_collections
 
-IMAGE_WIDTH = 1334
-IMAGE_HEIGHT = 2048
+IMAGE_WIDTH  = 240
+IMAGE_HEIGHT = 320
 
-IMAGE_WIDTH_RESIZE = 240
-IMAGE_HEIGHT_RESIZE = 320
+# IMAGE_WIDTH_RESIZE = 240
+# IMAGE_HEIGHT_RESIZE = 320
 
 NUM_VERTEX = 7306
 
@@ -18,7 +18,7 @@ def readTFRECORD(tfrecord_pth: str,
     data_set = data_set.repeat()
     data_set = data_set.map(parse, num_parallel_calls=AUTOTUNE)
 
-    data_set = data_set.shuffle(6000,
+    data_set = data_set.shuffle(config.batch_size * 16,
                                 reshuffle_each_iteration=True)
     data_batch = data_set.batch(config.batch_size, drop_remainder=True)
     data_batch = data_batch.prefetch(buffer_size=AUTOTUNE)
@@ -44,6 +44,6 @@ def parse(example_proto):
 
     img = tf.reshape(img, [IMAGE_HEIGHT, IMAGE_WIDTH, 3])
     vtx = tf.reshape(vtx, [NUM_VERTEX, 3])
-    img = tf.image.resize(img, [IMAGE_HEIGHT_RESIZE, IMAGE_WIDTH_RESIZE])
+    # img = tf.image.resize(img, [IMAGE_HEIGHT_RESIZE, IMAGE_WIDTH_RESIZE])
 
     return {'img': img, 'vtx': vtx}
