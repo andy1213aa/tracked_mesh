@@ -110,7 +110,7 @@ def create_learning_rate_fn(config: ml_collections.ConfigDict,
 
     warmup_fn = optax.linear_schedule(init_value=0.,
                                       end_value=base_learning_rate,
-                                      transition_steps=config.batch_size *
+                                      transition_steps=config.warmup_epochs *
                                       steps_per_epoch)
 
     cosine_epochs = max(config.num_epochs - config.warmup_epochs, 1)
@@ -183,10 +183,10 @@ def train_and_evalutation(config: ml_collections.ConfigDict, workdir: str,
         num_steps = config.num_train_steps
 
     model_cls = getattr(models, config.model)
-    pca_coef = get_pca_coef(config.pca)
-    model = create_model(model_cls, config, pca_coef)
+    
+    model = create_model(model_cls, config, get_pca_coef(config.pca))
 
-    base_learning_rate = config.learning_rate * config.batch_size / 256.
+    base_learning_rate = config.learning_rate * config.batch_size
 
     learning_rate_fn = create_learning_rate_fn(config, base_learning_rate,
                                                steps_per_epoch)

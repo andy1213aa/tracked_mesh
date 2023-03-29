@@ -15,6 +15,13 @@ import einops
 import optax
 
 
+def get_pca_coef(pca_pth):
+    import pickle
+    with open('pca.pickle', 'rb') as f:
+        pca = pickle.load(f)
+    return pca.components_
+
+
 def inititalized(key, image_size, model):
     input_shape = (1, image_size[0], image_size[1], 3)
 
@@ -27,9 +34,11 @@ def inititalized(key, image_size, model):
     return variables
 
 
-def create_model(model_cls, config, **kwargs):
+def create_model(model_cls, config, pca_coef, **kwargs):
 
-    return model_cls(mesh_vertexes=config.vertex, dtype=jnp.float32)
+    return model_cls(mesh_vertexes=config.vertex,
+                     dtype=jnp.float32,
+                     pca_coef=pca_coef)
 
 
 class TrainState(train_state.TrainState):
@@ -84,7 +93,7 @@ def inference(
     steps_per_epoch = 1973
 
     model_cls = getattr(models, config.model)
-    model = create_model(model_cls, config)
+    model = create_model(model_cls, config, get_pca_coef(config.pca))
 
     base_learning_rate = config.learning_rate * config.batch_size / 256.
 
@@ -103,14 +112,13 @@ def inference(
     img = cv2.resize(img, config.image_size)
     img = img.reshape((-1, ) + img.shape)
     img = jnp.asarray(img).astype(jnp.float16)
-    
+
     pred = state.apply_fn({'params': state.params}, img)
     pred_cpu = jax.device_get(pred)
-    pred_cpu = einops.rearrange(pred_cpu, 'b v c -> (b v) c')
+    pred_cpu = einops.rearrange(pred_cpu, 'b (v c) -> (b v) c', c=3)
 
     obj_v_result = [f'v {x} {y} {z}\n' for x, y, z in pred_cpu]
 
-    
     with open('019278.obj', 'w') as f:
 
         f.writelines(obj_v_result)
