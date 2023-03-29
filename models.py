@@ -10,15 +10,15 @@ import einops
 ModuleDef = Any
 
 
-class PCACOEF_Initializer(nn.initializers.Initializer):
+# class PCACOEF_Initializer(nn.initializers.Initializer):
 
-    def __init__(self, my_array: jnp.ndarray):
-        self.my_array = my_array
+#     def __init__(self, my_array: jnp.ndarray):
+#         self.my_array = my_array
 
-    def __call__(self, shape: Tuple[int, ...], dtype: Any, key: Any, *args,
-                 **kwargs):
+#     def __call__(self, shape: Tuple[int, ...], dtype: Any, key: Any, *args,
+#                  **kwargs):
         
-        return self.my_array
+#         return self.my_array
 
 
 class CNN(nn.Module):
@@ -34,8 +34,6 @@ class CNN(nn.Module):
     @nn.compact
     def __call__(self, x, train: bool = True):
         conv = partial(self.conv, use_bias=False, dtype=self.dtype)
-        
-        rng = jrand.PRNGKey(0)
        
         # zeros_init = jax.nn.initializers.zeros(rng, (160, 7306*3))
         # pcacoef_init = zeros_init + self.pca_coef
@@ -48,7 +46,7 @@ class CNN(nn.Module):
         x = nn.Dense(160)(x)
         # x = nn.Dense(self.mesh_vertexes)(x)
         x = nn.Dense(self.mesh_vertexes,
-                     kernel_init=PCACOEF_Initializer(jnp.array(
+                     kernel_init=constant(jnp.array(
                          self.pca_coef)))(x)
 
         # x_dim = nn.Dense(self.mesh_vertexes)(x)
@@ -66,7 +64,3 @@ Classic_CNN = partial(
     num_filters=[64, 64, 96, 96, 144, 144, 216, 216, 324, 324, 486, 486],
     num_strides=[(2, 2), (1, 1), (2, 2), (1, 1), (2, 2), (1, 1), (2, 2),
                  (1, 1), (2, 2), (1, 1), (2, 2), (1, 1)])
-
-# Classic_CNN = partial(CNN,
-#                       num_filters=[64, 64, 96, 96],
-#                       num_strides=[(2, 2), (1, 1), (2, 2), (1, 1)])
