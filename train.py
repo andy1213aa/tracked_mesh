@@ -25,6 +25,12 @@ import optax
 import models
 
 
+def get_pca_coef(pca_pth):
+    import pickle
+    with open('pca.pickle', 'rb') as f:
+        pca = pickle.load(f)
+    return pca.components_
+
 
 def prepare_tf_data(xs):
     """Convert a input batch from tf Tensors to numpy arrays."""
@@ -92,9 +98,11 @@ class TrainState(train_state.TrainState):
     dynamic_scale: dynamic_scale_lib.DynamicScale
 
 
-def create_model(model_cls, config,**kwargs):
+def create_model(model_cls, config, pca_coef, **kwargs):
 
-    return model_cls(mesh_vertexes=config.vertex, dtype=jnp.float32)
+    return model_cls(mesh_vertexes=config.vertex,
+                     dtype=jnp.float32,
+                     pca_coef=pca_coef)
 
 
 def create_learning_rate_fn(config: ml_collections.ConfigDict,
@@ -175,7 +183,8 @@ def train_and_evalutation(config: ml_collections.ConfigDict, workdir: str,
         num_steps = config.num_train_steps
 
     model_cls = getattr(models, config.model)
-    model = create_model(model_cls, config)
+    pca_coef = get_pca_coef(config.pca)
+    model = create_model(model_cls, config, pca_coef)
 
     base_learning_rate = config.learning_rate * config.batch_size / 256.
 
@@ -208,7 +217,7 @@ def train_and_evalutation(config: ml_collections.ConfigDict, workdir: str,
     for step, batch in zip(range(step_offset, num_steps), train_iter):
 
         state, metrics = p_train_step(state, batch)
-        
+
         for h in hooks:
             h(step)
         if step == step_offset:
