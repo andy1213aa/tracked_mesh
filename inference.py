@@ -95,7 +95,7 @@ def inference(
     model_cls = getattr(models, config.model)
     model = create_model(model_cls, config, get_pca_coef(config.pca))
 
-    base_learning_rate = config.learning_rate * config.batch_size / 256.
+    base_learning_rate = config.learning_rate * config.batch_size
 
     learning_rate_fn = create_learning_rate_fn(config, base_learning_rate,
                                                steps_per_epoch)
@@ -106,7 +106,7 @@ def inference(
     state = restore_checkpoint(state, workdir)
 
     img = cv2.imread(
-        '/home/aaron/Desktop/multiface/6674443--GHS/images/E041_Mouth_Nose_Right/400016/019278.png'
+        '/home/aaron/Desktop/multiface/6674443--GHS/images/E006_Jaw_Drop_Brows_Up/400016/001989.png'
     )
     cv2.imwrite('019278.png', img)
     img = cv2.resize(img, config.image_size)
@@ -119,6 +119,6 @@ def inference(
 
     obj_v_result = [f'v {x} {y} {z}\n' for x, y, z in pred_cpu]
 
-    with open('019278.obj', 'w') as f:
+    with open('001989.obj', 'w') as f:
 
         f.writelines(obj_v_result)

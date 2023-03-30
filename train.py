@@ -129,7 +129,8 @@ def create_train_state(rng, config: ml_collections.ConfigDict, model,
     """Create initital training state."""
 
     variables = inititalized(rng, image_size, model)
-    tx = optax.adam(learning_rate=learning_rate_fn)
+    tx = optax.adam(learning_rate=learning_rate_fn, b1=0.9, b2=0.999)
+    # tx = optax.tx = optax.rmsprop(learning_rate=learning_rate_fn, eps=1e-4)
     state = TrainState.create(
         apply_fn=model.apply,
         params=variables['params'],
@@ -186,7 +187,7 @@ def train_and_evalutation(config: ml_collections.ConfigDict, workdir: str,
     
     model = create_model(model_cls, config, get_pca_coef(config.pca))
 
-    base_learning_rate = config.learning_rate * config.batch_size
+    base_learning_rate = config.learning_rate 
 
     learning_rate_fn = create_learning_rate_fn(config, base_learning_rate,
                                                steps_per_epoch)
