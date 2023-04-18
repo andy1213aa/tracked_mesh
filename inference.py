@@ -13,6 +13,38 @@ import os
 from absl import logging
 import einops
 import optax
+from pathlib import Path
+import numpy as np
+
+
+def load_obj(pth):
+
+    def is_number(s):
+        try:
+            float(s)
+            return True
+        except ValueError:
+            return False
+
+    obj_pth = Path(pth)
+
+    if not obj_pth.exists:
+        logging.info(f'file {obj_pth} does not exist')
+        return None, False
+    else:
+        with open(obj_pth, 'r') as f:
+            vertices = []
+            for line in f:
+                if 'v' in line and 'vn' not in line and 'vt' not in line:
+
+                    v = [
+                        float(x) for x in list(
+                            filter(lambda x: is_number(x), line.split()))
+                    ]
+                    vertices.append(v)
+                if 'f' in line:
+                    break
+            return True, vertices
 
 
 def get_pca_coef(pca_pth):
@@ -105,8 +137,9 @@ def inference(
 
     state = restore_checkpoint(state, workdir)
 
+    idx = '002067'
     img = cv2.imread(
-        '/home/aaron/Desktop/multiface/6674443--GHS/images/E006_Jaw_Drop_Brows_Up/400016/001989.png'
+        f'/home/aaron/Desktop/multiface/6674443_GHS/images/E006_Jaw_Drop_Brows_Up/400016/{idx}.png'
     )
     cv2.imwrite('019278.png', img)
     img = cv2.resize(img, config.image_size)
@@ -117,8 +150,14 @@ def inference(
     pred_cpu = jax.device_get(pred)
     pred_cpu = einops.rearrange(pred_cpu, 'b (v c) -> (b v) c', c=3)
 
+    res, vertex_true = load_obj(
+        f'/home/aaron/Desktop/multiface/6674443_GHS/geom/tracked_mesh/E006_Jaw_Drop_Brows_Up/{idx}.obj'
+    )
+    vertex_true = np.array(vertex_true)
+
+    print((np.mean(vertex_true - pred_cpu)**2))
+
     obj_v_result = [f'v {x} {y} {z}\n' for x, y, z in pred_cpu]
-
-    with open('001989.obj', 'w') as f:
-
+    obj_v_result = np.array(obj_v_result)
+    with open(f'{idx}.obj', 'w') as f:
         f.writelines(obj_v_result)

@@ -65,6 +65,38 @@ def mean_square_error_loss(pred, gt):
     return jnp.mean(jnp.square(jnp.subtract(pred, gt)))
 
 
+def chamfer_distance_loss(x, y):
+    # x, y shape: (B, N, 1)
+    x = einops.rearrange(x, 'B N -> B N 1')
+    y = einops.rearrange(y, 'B N -> B N 1')
+    batch_size, num_points, _ = x.shape
+
+    # Compute pairwise distances
+    xx = jnp.sum(jnp.square(x), axis=-1, keepdims=True)
+    yy = jnp.sum(jnp.square(y), axis=-1, keepdims=True)
+    xy = jnp.matmul(x, y.transpose((0, 2, 1)))
+    distances = xx - 2 * xy + yy.transpose((0, 2, 1))
+
+    # Compute Chamfer distances
+    dx = jnp.min(distances, axis=-1)
+    dy = jnp.min(distances, axis=-2)
+    loss = jnp.mean(dx, axis=-1) + jnp.mean(dy, axis=-1)
+
+    return loss
+
+
+def earth_mover_distance_loss(pred_points, gt_points):
+    distance_matrix = jnp.sqrt(
+        jnp.sum(jnp.square(
+            jnp.expand_dims(pred_points, axis=1) -
+            jnp.expand_dims(gt_points, axis=0)),
+                axis=-1))
+    assignment_matrix = jax.linear_assignment(distance_matrix)
+    assigned_distance = jnp.sum(distance_matrix[assignment_matrix[0],
+                                                assignment_matrix[1]])
+    return assigned_distance
+
+
 def restore_checkpoint(state, workdir):
     return checkpoints.restore_checkpoint(workdir, state)
 
@@ -85,7 +117,9 @@ def create_input_iter(ds):
 
 
 def compute_metrics(y_pred, y_true):
-    loss = mean_square_error_loss(y_pred, y_true)
+    # loss = mean_square_error_loss(y_pred, y_true)
+    loss = chamfer_distance_loss(y_pred, y_true)
+
     metrics = {
         'loss': loss,
     }
@@ -173,7 +207,7 @@ def train_and_evalutation(config: ml_collections.ConfigDict, workdir: str,
 
     rng = jrand.PRNGKey(0)
     ds = readTFRECORD(datadir, config)
-    steps_per_epoch = 1973
+    steps_per_epoch = 1366
     steps_per_checkpoint = steps_per_epoch * 10
 
     train_iter = create_input_iter(ds)
@@ -184,10 +218,10 @@ def train_and_evalutation(config: ml_collections.ConfigDict, workdir: str,
         num_steps = config.num_train_steps
 
     model_cls = getattr(models, config.model)
-    
+
     model = create_model(model_cls, config, get_pca_coef(config.pca))
 
-    base_learning_rate = config.learning_rate 
+    base_learning_rate = config.learning_rate
 
     learning_rate_fn = create_learning_rate_fn(config, base_learning_rate,
                                                steps_per_epoch)

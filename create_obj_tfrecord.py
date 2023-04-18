@@ -50,7 +50,59 @@ types = [
     "E057_Cheeks_Puffed", "E058_Right_Cheek_Puffed", "E059_Left_Cheek_Puffed",
     "E060_Blow_Cheeks_Full_Of_Air", "E061_Lips_Puffed",
     "E062_Nostrils_Dilated", "E063_Nostrils_Sucked_In",
-    "E064_Raise_Right_Eyebrow", "E065_Raise_Left_Eyebrow", "E074_Blink"
+    "E064_Raise_Right_Eyebrow", "E065_Raise_Left_Eyebrow", "E074_Blink",
+    # "SEN_a_good_morrow_to_you_my_boy", "SEN_a_voice_spoke_near-at-hand",
+    # "SEN_alfalfa_is_healthy_for_you",
+    # "SEN_all_your_wishful_thinking_wont_change_that",
+    # "SEN_allow_each_child_to_have_an_ice_pop",
+    # "SEN_and_you_think_you_have_language_problems",
+    # "SEN_approach_your_interview_with_statuesque_composure",
+    # "SEN_are_you_looking_for_employment",
+    # "SEN_as_she_drove_she_thought_about_her_plan",
+    # "SEN_both_figures_would_go_higher_in_later_years",
+    # "SEN_boy_youre_stirrin_early_a_sleepy_voice_said",
+    # "SEN_by_eating_yogurt_you_may_live_longer",
+    # "SEN_cliff_was_soothed_by_the_luxurious_massage",
+    # "SEN_did_Shawn_catch_that_big_goose_without_help",
+    # "SEN_do_they_make_class_biased_decisions",
+    # "SEN_drop_five_forms_in_the_box_before_you_go_out",
+    # "SEN_george_is_paranoid_about_a_future_gas_shortage",
+    # "SEN_go_change_your_shoes_before_you_turn_around",
+    # "SEN_greg_buys_fresh_milk_each_weekday_morning",
+    # "SEN_have_you_got_our_keys_handy", "SEN_how_do_oysters_make_pearls",
+    # "SEN_how_long_would_it_be_occupied",
+    # "SEN_how_ya_gonna_keep_em_down_on_the_farm",
+    # "SEN_however_a_boys_lively_eyes_might_rove",
+    # "SEN_id_rather_not_buy_these_shoes_than_be_overcharged",
+    # "SEN_if_dark_came_they_would_lose_her",
+    # "SEN_im_going_to_search_this_house",
+    # "SEN_its_healthier_to_cook_without_sugar",
+    # "SEN_jeffs_toy_go_cart_never_worked", "SEN_more_he_could_take_at_leisure",
+    # "SEN_nobody_else_showed_pleasure", "SEN_oh_we_managed_she_said",
+    # "SEN_she_always_jokes_about_too_much_garlic_in_his_food",
+    # "SEN_take_charge_of_choosing_her_bridesmaids_gowns",
+    # "SEN_thank_you_she_said_dusting_herself_off",
+    # "SEN_the_small_boy_put_the_worm_on_the_hook",
+    # "SEN_then_he_thought_me_more_perverse_than_ever",
+    # "SEN_they_all_like_long_hot_showers",
+    # "SEN_they_are_both_trend_following_methods",
+    # "SEN_they_enjoy_it_when_I_audition", "SEN_they_had_slapped_their_thighs",
+    # "SEN_they_werent_as_well_paid_as_they_should_have_been",
+    # "SEN_theyre_going_to_louse_me_up_good", "SEN_theyve_never_met_you_know",
+    # "SEN_when_she_awoke_she_was_the_ship",
+    # "SEN_why_buy_oil_when_you_always_use_mine",
+    # "SEN_why_charge_money_for_such_garbage",
+    # "SEN_why_put_such_a_high_value_on_being_top_dog",
+    # "SEN_with_each_song_he_gave_verbal_footnotes",
+    # "SEN_youre_boiling_milk_aint_you"
+]
+
+views = [
+    "400002", "400004", "400007", "40009", "400012", "400013", "400015",
+    "400016", "400017", "400018", "400019", "400023", "400026", "400027",
+    "400029", "400030", "400031", "400037", "400039", "400041", "4000042",
+    "400048", "400049", "400051", "400060", "400061", "400063", "400064",
+    "400069"
 ]
 
 
@@ -141,12 +193,12 @@ class ImageMesh2TFRecord_Converter():
 
             type_pth = Path(f'{self._images_pth}/{typ}')
             camera_angle_pths = [
-                pth for pth in type_pth.glob('*') if pth.is_dir()
+                pth for pth in type_pth.glob('*') if pth.is_dir() and pth.stem in views
             ]
 
             for ang_pth in camera_angle_pths:
                 images_pth = [pth for pth in ang_pth.glob('*.png')]
-
+                
                 for img_pth in images_pth:
                     idx = img_pth.stem
                     res_mesh, mesh = self._load_obj(
@@ -172,8 +224,8 @@ class ImageMesh2TFRecord_Converter():
                             }))
                         cnt += 1
 
-                        if cnt % 100 == 0:
-                            logging.info(f'Finished {cnt} data.')
+                        # if cnt % 100 == 0:
+                        #     logging.info(f'Finished {cnt} data.')
                         writer.write(example.SerializeToString())
 
         writer.close()
@@ -201,7 +253,6 @@ class ImageMesh2TFRecord_Converter():
         pca = PCA(PCA_NUM).fit(total_mesh)
         logging.info("Finish PCA; n_com = {}".format(PCA_NUM))
 
-        
         with open('pca.pickle', 'wb') as f:
             pickle.dump(pca, f)
 
@@ -210,9 +261,6 @@ def main(argv):
     conveter = ImageMesh2TFRecord_Converter(FLAGS.record_pth, FLAGS.data_pth)
     conveter.create_pca()
     # conveter.create_tfrecord()
-    # # res, vertexs = load_obj(FLAGS.data_dir)
-    # if res:
-    #     logging.info(vertexs)
 
 
 if __name__ == '__main__':
