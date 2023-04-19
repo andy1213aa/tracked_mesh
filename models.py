@@ -19,19 +19,37 @@ class CNN(nn.Module):
     conv: ModuleDef = nn.Conv
 
     @nn.compact
-    def __call__(self, x, train: bool = True):
-        conv = partial(self.conv, use_bias=False, dtype=self.dtype)
+    def __call__(self, x, training: bool = True):
+        conv = partial(self.conv, use_bias=False, dtype=self.dtype, kernel_init=nn.initializers.lecun_uniform())
 
         for i, filters in enumerate(self.num_filters):
             x = conv(filters, (3, 3), self.num_strides[i], name=f'conv{i}')(x)
             x = nn.relu(x)
 
-        # x = nn.Dropout(rate=0.2)(x, deterministic=not train)
+        
         x = einops.rearrange(x, 'b h w c -> b (h w c)')
+        # Set the dropout layer with a `rate` of 20%.
+        # When the `deterministic` flag is `True`, dropout is turned off.
+        x = nn.Dropout(rate=0.2)(x, deterministic=not training)
+        
         x = nn.Dense(160)(x)
         x = nn.Dense(self.mesh_vertexes,
                      kernel_init=constant(jnp.array(self.pca_coef)))(x)
+        x = einops.rearrange(x, 'b (n c) -> b n c', n=7306, c=3)
 
+        return x
+
+
+
+Classic_CNN = partial(
+    CNN,
+    num_filters=[64, 64, 96, 96, 144, 144, 216, 216, 324, 324, 486, 486],
+    num_strides=[(2, 2), (1, 1), (2, 2), (1, 1), (2, 2), (1, 1), (2, 2),
+                 (1, 1), (2, 2), (1, 1), (2, 2), (1, 1)])
+
+
+
+        # x = jnp.reshape(x, (7306, 3))
         # x = nn.Dense(self.mesh_vertexes)(x)
         # x_dim = nn.Dense(self.mesh_vertexes)(x)
         # x_dim = nn.relu(x_dim)
@@ -53,13 +71,5 @@ class CNN(nn.Module):
 
         # concat = jnp.stack([x_dim, y_dim, z_dim], axis=-1)
         # return concat
-        return x
         # return jnp.reshape(concat, (jax.local_device_count(), -1)+ concat.shape[1:])
         # return einops.rearrange(concat, '(p b) d c -> p b d c')
-
-
-Classic_CNN = partial(
-    CNN,
-    num_filters=[64, 64, 96, 96, 144, 144, 216, 216, 324, 324, 486, 486],
-    num_strides=[(2, 2), (1, 1), (2, 2), (1, 1), (2, 2), (1, 1), (2, 2),
-                 (1, 1), (2, 2), (1, 1), (2, 2), (1, 1)])

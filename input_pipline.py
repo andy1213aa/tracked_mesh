@@ -43,7 +43,7 @@ def parse(example_proto):
     vtx = tf.io.decode_raw(vtx, np.float32)
 
     img = tf.reshape(img, [IMAGE_HEIGHT, IMAGE_WIDTH, 3])
-    vtx = tf.reshape(vtx, [NUM_VERTEX * 3])
+    vtx = tf.reshape(vtx, [NUM_VERTEX, 3])
     # img = tf.image.resize(img, [IMAGE_HEIGHT_RESIZE, IMAGE_WIDTH_RESIZE])
 
     return {'img': img, 'vtx': vtx}

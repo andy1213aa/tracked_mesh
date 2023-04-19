@@ -27,7 +27,7 @@ import models
 
 def get_pca_coef(pca_pth):
     import pickle
-    with open('pca.pickle', 'rb') as f:
+    with open(pca_pth, 'rb') as f:
         pca = pickle.load(f)
     return pca.components_
 
@@ -53,9 +53,12 @@ def inititalized(key, image_size, model):
 
     @jax.jit
     def init(*args):
-        return model.init(*args)
+        return model.init(*args, training=False)
 
-    variables = init({'params': key}, jnp.ones(input_shape, model.dtype))
+    # Dropout is disabled with `training=False` (that is, `deterministic=True`).
+    variables = init({'params': key},
+                     jnp.ones(input_shape, model.dtype)
+                     )
 
     return variables
 
@@ -65,23 +68,13 @@ def mean_square_error_loss(pred, gt):
     return jnp.mean(jnp.square(jnp.subtract(pred, gt)))
 
 
-def chamfer_distance_loss(x, y):
-    # x, y shape: (B, N, 1)
-    x = einops.rearrange(x, 'B N -> B N 1')
-    y = einops.rearrange(y, 'B N -> B N 1')
-    batch_size, num_points, _ = x.shape
-
-    # Compute pairwise distances
-    xx = jnp.sum(jnp.square(x), axis=-1, keepdims=True)
-    yy = jnp.sum(jnp.square(y), axis=-1, keepdims=True)
-    xy = jnp.matmul(x, y.transpose((0, 2, 1)))
-    distances = xx - 2 * xy + yy.transpose((0, 2, 1))
-
-    # Compute Chamfer distances
-    dx = jnp.min(distances, axis=-1)
-    dy = jnp.min(distances, axis=-2)
-    loss = jnp.mean(dx, axis=-1) + jnp.mean(dy, axis=-1)
-
+def chamfer_distance_loss(pred_points, gt_points):
+    diff = jnp.expand_dims(pred_points, axis=1) - jnp.expand_dims(gt_points,
+                                                                  axis=0)
+    distance = jnp.sum(jnp.square(jnp.linalg.norm(diff, axis=-1)), axis=-1)
+    pred_to_gt = jnp.min(distance, axis=1)
+    gt_to_pred = jnp.min(distance, axis=0)
+    loss = jnp.mean(pred_to_gt) + jnp.mean(gt_to_pred)
     return loss
 
 
@@ -117,8 +110,8 @@ def create_input_iter(ds):
 
 
 def compute_metrics(y_pred, y_true):
-    # loss = mean_square_error_loss(y_pred, y_true)
-    loss = chamfer_distance_loss(y_pred, y_true)
+    loss = mean_square_error_loss(y_pred, y_true)
+    # loss = chamfer_distance_loss(y_pred, y_true)
 
     metrics = {
         'loss': loss,
@@ -129,6 +122,7 @@ def compute_metrics(y_pred, y_true):
 
 class TrainState(train_state.TrainState):
     # batch_stats: Any
+    key: jax.random.KeyArray
     dynamic_scale: dynamic_scale_lib.DynamicScale
 
 
@@ -146,43 +140,56 @@ def create_learning_rate_fn(config: ml_collections.ConfigDict,
                                       end_value=base_learning_rate,
                                       transition_steps=config.warmup_epochs *
                                       steps_per_epoch)
-
+    #inverse square root decay
+    # ISR_fn = optax.constant_schedule(
+        
+    # )
     cosine_epochs = max(config.num_epochs - config.warmup_epochs, 1)
     consine_fn = optax.cosine_decay_schedule(init_value=base_learning_rate,
                                              decay_steps=cosine_epochs *
                                              steps_per_epoch)
+    
+    # optax.exponential_decay(init_value=consine_fn,decay_rate=)
     schedule_fn = optax.join_schedules(
         schedules=[warmup_fn, consine_fn],
         boundaries=[config.warmup_epochs * steps_per_epoch])
 
     return schedule_fn
+    # return warmup_fn
 
 
-def create_train_state(rng, config: ml_collections.ConfigDict, model,
+def create_train_state(params_key, dropout_key, config: ml_collections.ConfigDict, model,
                        image_size, learning_rate_fn):
     """Create initital training state."""
 
-    variables = inititalized(rng, image_size, model)
+    variables = inititalized(params_key, image_size, model)
     tx = optax.adam(learning_rate=learning_rate_fn, b1=0.9, b2=0.999)
     # tx = optax.tx = optax.rmsprop(learning_rate=learning_rate_fn, eps=1e-4)
     state = TrainState.create(
         apply_fn=model.apply,
         params=variables['params'],
         tx=tx,
+        key=dropout_key,
         #   batch_stats=batch_stats,
         dynamic_scale=None)
     return state
 
 
-def train_step(state, batch, learning_rate_fn):
+def train_step(state, batch, learning_rate_fn, dropout_key):
 
     def loss_fn(params):
         """loss function used for training."""
-        pred = state.apply_fn({'params': params}, batch['img'])
+        # Dropout is enabled with `training=True` (that is, `deterministic=False`).
+        pred = state.apply_fn({'params': params},
+                              x=batch['img'],
+                              training=True,
+                              rngs={'dropout': dropout_train_key})
+        
         loss = mean_square_error_loss(pred, batch['vtx'])
         return loss, pred
 
     step = state.step
+    dropout_train_key = jax.random.fold_in(key=dropout_key, data=step)
     # dynamic_scale = state.dynamic_scale
     lr = learning_rate_fn(step)
 
@@ -205,9 +212,10 @@ def train_and_evalutation(config: ml_collections.ConfigDict, workdir: str,
     writer = metric_writers.create_default_writer(
         logdir=workdir, just_logging=jax.process_index() != 0)
 
-    rng = jrand.PRNGKey(0)
+    root_key = jrand.PRNGKey(0)
+    main_key, params_key, dropout_key = jax.random.split(key=root_key, num=3)
     ds = readTFRECORD(datadir, config)
-    steps_per_epoch = 1366
+    steps_per_epoch = 11
     steps_per_checkpoint = steps_per_epoch * 10
 
     train_iter = create_input_iter(ds)
@@ -226,7 +234,7 @@ def train_and_evalutation(config: ml_collections.ConfigDict, workdir: str,
     learning_rate_fn = create_learning_rate_fn(config, base_learning_rate,
                                                steps_per_epoch)
 
-    state = create_train_state(rng, config, model, config.image_size,
+    state = create_train_state(params_key, dropout_key,config, model, config.image_size,
                                learning_rate_fn)
 
     state = restore_checkpoint(state, workdir)
@@ -235,7 +243,8 @@ def train_and_evalutation(config: ml_collections.ConfigDict, workdir: str,
     state = jax_utils.replicate(state)
 
     p_train_step = jax.pmap(partial(train_step,
-                                    learning_rate_fn=learning_rate_fn),
+                                    learning_rate_fn=learning_rate_fn,
+                                    dropout_key=dropout_key),
                             axis_name='batch')
 
     train_metrics = []
