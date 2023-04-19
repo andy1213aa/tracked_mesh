@@ -49,7 +49,7 @@ def load_obj(pth):
 
 def get_pca_coef(pca_pth):
     import pickle
-    with open('pca.pickle', 'rb') as f:
+    with open(pca_pth, 'rb') as f:
         pca = pickle.load(f)
     return pca.components_
 
@@ -59,7 +59,7 @@ def inititalized(key, image_size, model):
 
     @jax.jit
     def init(*args):
-        return model.init(*args)
+        return model.init(*args, training=False)
 
     variables = init({'params': key}, jnp.ones(input_shape, model.dtype))
 
@@ -75,20 +75,23 @@ def create_model(model_cls, config, pca_coef, **kwargs):
 
 class TrainState(train_state.TrainState):
     # batch_stats: Any
+    key: jax.random.KeyArray
     dynamic_scale: dynamic_scale_lib.DynamicScale
 
 
-def create_train_state(rng, config: ml_collections.ConfigDict, model,
-                       image_size, learning_rate_fn):
+def create_train_state(params_key, dropout_key,
+                       config: ml_collections.ConfigDict, model, image_size,
+                       learning_rate_fn):
     """Create initital training state."""
 
-    variables = inititalized(rng, image_size, model)
+    variables = inititalized(params_key, image_size, model)
     tx = optax.adam(learning_rate=learning_rate_fn)
     state = TrainState.create(
         apply_fn=model.apply,
         params=variables['params'],
         tx=tx,
         #   batch_stats=batch_stats,
+        key=dropout_key,
         dynamic_scale=None)
     return state
 
@@ -121,7 +124,8 @@ def inference(
     workdir: str,
 ):
 
-    rng = jrand.PRNGKey(0)
+    root_key = jrand.PRNGKey(0)
+    main_key, params_key, dropout_key = jax.random.split(key=root_key, num=3)
     steps_per_epoch = 1973
 
     model_cls = getattr(models, config.model)
@@ -132,26 +136,32 @@ def inference(
     learning_rate_fn = create_learning_rate_fn(config, base_learning_rate,
                                                steps_per_epoch)
 
-    state = create_train_state(rng, config, model, config.image_size,
-                               learning_rate_fn)
+    state = create_train_state(params_key, dropout_key, config, model,
+                               config.image_size, learning_rate_fn)
 
     state = restore_checkpoint(state, workdir)
 
-    idx = '002067'
+    facial = 'E001_Neutral_Eyes_Open'
+    view = '400002'
+    idx = '000220'
+
     img = cv2.imread(
-        f'/home/aaron/Desktop/multiface/6674443_GHS/images/E006_Jaw_Drop_Brows_Up/400016/{idx}.png'
+        f'/home/aaron/Desktop/multiface/6674443_GHS/images/{facial}/{view}/{idx}.png'
     )
-    cv2.imwrite('019278.png', img)
+
     img = cv2.resize(img, config.image_size)
     img = img.reshape((-1, ) + img.shape)
     img = jnp.asarray(img).astype(jnp.float16)
-
-    pred = state.apply_fn({'params': state.params}, img)
+    dropout_train_key = jax.random.fold_in(key=dropout_key, data=state.step)
+    pred = state.apply_fn({'params': state.params},
+                          img,
+                          training=False,
+                          rngs={'dropout': dropout_train_key})
     pred_cpu = jax.device_get(pred)
-    pred_cpu = einops.rearrange(pred_cpu, 'b (v c) -> (b v) c', c=3)
+    pred_cpu = einops.rearrange(pred_cpu, 'b v c -> (b v) c', c=3)  #b = 1
 
     res, vertex_true = load_obj(
-        f'/home/aaron/Desktop/multiface/6674443_GHS/geom/tracked_mesh/E006_Jaw_Drop_Brows_Up/{idx}.obj'
+        f'/home/aaron/Desktop/multiface/6674443_GHS/geom/tracked_mesh/{facial}/{idx}.obj'
     )
     vertex_true = np.array(vertex_true)
 
@@ -159,5 +169,24 @@ def inference(
 
     obj_v_result = [f'v {x} {y} {z}\n' for x, y, z in pred_cpu]
     obj_v_result = np.array(obj_v_result)
-    with open(f'{idx}.obj', 'w') as f:
-        f.writelines(obj_v_result)
+
+    txt = ''
+    total_lines = 0
+    with open(
+            f'/home/aaron/Desktop/multiface/6674443_GHS/geom/tracked_mesh/{facial}/{idx}.obj',
+            'r') as f:
+        total_lines = len(f.readlines())
+
+    with open(
+            f'/home/aaron/Desktop/multiface/6674443_GHS/geom/tracked_mesh/{facial}/{idx}.obj',
+            'r') as f:
+        for i in range(7306):
+            txt += f'v {pred_cpu[i][0]} {pred_cpu[i][1]} {pred_cpu[i][2]}'
+        for _ in range(7306, total_lines + 1):
+            txt += f.readline()
+        print(total_lines)
+
+    with open('../test_data/test.obj', 'w') as w:
+        w.write(txt)
+    # with open(f'{idx}.obj', 'w') as f:
+    #     f.writelines(obj_v_result)

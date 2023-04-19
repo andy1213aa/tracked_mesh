@@ -215,7 +215,7 @@ def train_and_evalutation(config: ml_collections.ConfigDict, workdir: str,
     root_key = jrand.PRNGKey(0)
     main_key, params_key, dropout_key = jax.random.split(key=root_key, num=3)
     ds = readTFRECORD(datadir, config)
-    steps_per_epoch = 11
+    steps_per_epoch = 18
     steps_per_checkpoint = steps_per_epoch * 10
 
     train_iter = create_input_iter(ds)
