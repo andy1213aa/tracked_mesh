@@ -1,5 +1,5 @@
 from absl import logging
-
+import numpy as np
 import ml_collections
 from clu import metric_writers
 from clu import periodic_actions
@@ -23,7 +23,7 @@ import time
 from typing import Any
 import optax
 import models
-
+from scipy.optimize import linear_sum_assignment
 
 def get_pca_coef(pca_pth):
     import pickle
@@ -78,16 +78,6 @@ def chamfer_distance_loss(pred_points, gt_points):
     return loss
 
 
-def earth_mover_distance_loss(pred_points, gt_points):
-    distance_matrix = jnp.sqrt(
-        jnp.sum(jnp.square(
-            jnp.expand_dims(pred_points, axis=1) -
-            jnp.expand_dims(gt_points, axis=0)),
-                axis=-1))
-    assignment_matrix = jax.linear_assignment(distance_matrix)
-    assigned_distance = jnp.sum(distance_matrix[assignment_matrix[0],
-                                                assignment_matrix[1]])
-    return assigned_distance
 
 
 def restore_checkpoint(state, workdir):
@@ -110,11 +100,13 @@ def create_input_iter(ds):
 
 
 def compute_metrics(y_pred, y_true):
-    loss = mean_square_error_loss(y_pred, y_true)
-    # loss = chamfer_distance_loss(y_pred, y_true)
+    mse = mean_square_error_loss(y_pred, y_true)
+    chamfer = chamfer_distance_loss(y_pred, y_true)
+    # loss = earth_mover_distance_loss(y_pred, y_true)
 
     metrics = {
-        'loss': loss,
+        'mse': mse, 
+        'chamfer': chamfer
     }
     metrics = lax.pmean(metrics, axis_name='batch')
     return metrics
@@ -185,7 +177,10 @@ def train_step(state, batch, learning_rate_fn, dropout_key):
                               training=True,
                               rngs={'dropout': dropout_train_key})
         
-        loss = mean_square_error_loss(pred, batch['vtx'])
+        # loss = mean_square_error_loss(pred, batch['vtx'])
+        loss = chamfer_distance_loss(pred, batch['vtx'])
+        # loss = earth_mover_distance_loss(pred, batch['vtx'])
+        
         return loss, pred
 
     step = state.step
@@ -215,7 +210,7 @@ def train_and_evalutation(config: ml_collections.ConfigDict, workdir: str,
     root_key = jrand.PRNGKey(0)
     main_key, params_key, dropout_key = jax.random.split(key=root_key, num=3)
     ds = readTFRECORD(datadir, config)
-    steps_per_epoch = 18
+    steps_per_epoch = config.steps_per_epoch
     steps_per_checkpoint = steps_per_epoch * 10
 
     train_iter = create_input_iter(ds)

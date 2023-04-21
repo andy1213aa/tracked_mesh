@@ -141,9 +141,9 @@ def inference(
 
     state = restore_checkpoint(state, workdir)
 
-    facial = 'E001_Neutral_Eyes_Open'
+    facial = 'E041_Mouth_Nose_Right'
     view = '400002'
-    idx = '000220'
+    idx = '019278'
 
     img = cv2.imread(
         f'/home/aaron/Desktop/multiface/6674443_GHS/images/{facial}/{view}/{idx}.png'
@@ -170,22 +170,25 @@ def inference(
     obj_v_result = [f'v {x} {y} {z}\n' for x, y, z in pred_cpu]
     obj_v_result = np.array(obj_v_result)
 
-    txt = ''
     total_lines = 0
     with open(
             f'/home/aaron/Desktop/multiface/6674443_GHS/geom/tracked_mesh/{facial}/{idx}.obj',
             'r') as f:
         total_lines = len(f.readlines())
 
+    print(total_lines)
+    txt = ''
     with open(
             f'/home/aaron/Desktop/multiface/6674443_GHS/geom/tracked_mesh/{facial}/{idx}.obj',
             'r') as f:
         for i in range(7306):
-            txt += f'v {pred_cpu[i][0]} {pred_cpu[i][1]} {pred_cpu[i][2]}'
-        for _ in range(7306, total_lines + 1):
+            f.readline()
+            txt += f'v {pred_cpu[i][0]} {pred_cpu[i][1]} {pred_cpu[i][2]}\n'
+        for _ in range(7306, total_lines):
+         
             txt += f.readline()
-        print(total_lines)
 
+    
     with open('../test_data/test.obj', 'w') as w:
         w.write(txt)
     # with open(f'{idx}.obj', 'w') as f:

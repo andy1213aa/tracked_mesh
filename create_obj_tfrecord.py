@@ -8,8 +8,8 @@ import os
 import numpy as np
 import einops
 
-IMAGE_WIDTH_RESIZE = 240#240
-IMAGE_HEIGHT_RESIZE = 320#320
+IMAGE_WIDTH_RESIZE = 240  #240
+IMAGE_HEIGHT_RESIZE = 320  #320
 PCA_NUM = 160
 
 FLAGS = flags.FLAGS
@@ -21,8 +21,15 @@ flags.DEFINE_string('data_pth',
                     default=None,
                     help='The directory of data root.')
 
+subjects = [
+    '2183941_GHS', '002539136_GHS', '002643814_GHS', '002757580_GHS',
+    '002914589_GHS', '5372021_GHS', '6674443_GHS', '6795937_GHS',
+    '7889059_GHS', '8870559_GHS'
+]
+
 types = [
-    'E001_Neutral_Eyes_Open', #"E006_Jaw_Drop_Brows_Up",
+    'E001_Neutral_Eyes_Open',
+    'E003_Neutral_Eyes_Closed',  #"E006_Jaw_Drop_Brows_Up",
     # "E007_Neck_Stretch_Brows_Up", "E008_Smile_Mouth_Closed",
     # "E009_Smile_Mouth_Open", "E010_Smile_Stretched",
     # "E011_Jaw_Open_Sharp_Corner_Lip_Stretch", "E012_Jaw_Open_Huge_Smile",
@@ -98,27 +105,26 @@ types = [
 ]
 
 views = [
-    "400002", "400007", "40009", "400012", "400013", "400015",
-    "400016", "400017", "400019", "400023",
-    "400029", "400030", "400031", "400037", "400039", "400041",
-    "400048", "400049", "400051", "400060", "400061", "400063", "400064",
-    "400069"
+    "400002", "400007", "40009", "400012", "400013", "400015", "400016",
+    "400017", "400019", "400023", "400029", "400030", "400031", "400037",
+    "400039", "400041", "400048", "400049", "400051", "400060", "400061",
+    "400063", "400064", "400069"
 ]
 
 
 class ImageMesh2TFRecord_Converter():
 
-    def __init__(self, records_path: str, data_pth: str):
+    def __init__(self, records_path: str, data_pth: str, tfrecord_writer: object):
         self._records_path = Path(records_path)
-        assert not self._records_path.exists(
-        ), f'There exist a TFRecord file at "{self._records_path}".'
+        # assert not self._records_path.exists(
+        # ), f'There exist a TFRecord file at "{self._records_path}".'
 
         self._data_pth = Path(data_pth)
         assert self._data_pth.exists(), 'The data_pth is not exist.'
 
         self._images_pth = Path(f'{data_pth}/images')
         self._geom_pth = Path(f'{data_pth}/geom/')
-
+        self.writer = tfrecord_writer
     def _load_obj(self, pth):
 
         def is_number(s):
@@ -184,7 +190,7 @@ class ImageMesh2TFRecord_Converter():
         
         
         """
-        writer = tf.io.TFRecordWriter(str(self._records_path))
+        
         cnt = 0
         for typ in types:  # list
 
@@ -193,12 +199,13 @@ class ImageMesh2TFRecord_Converter():
 
             type_pth = Path(f'{self._images_pth}/{typ}')
             camera_angle_pths = [
-                pth for pth in type_pth.glob('*') if pth.is_dir() and pth.stem in views
+                pth for pth in type_pth.glob('*')
+                if pth.is_dir() and pth.stem in views
             ]
 
             for ang_pth in camera_angle_pths:
                 images_pth = [pth for pth in ang_pth.glob('*.png')]
-                
+
                 for img_pth in images_pth:
                     idx = img_pth.stem
                     res_mesh, mesh = self._load_obj(
@@ -226,10 +233,11 @@ class ImageMesh2TFRecord_Converter():
 
                         # if cnt % 100 == 0:
                         #     logging.info(f'Finished {cnt} data.')
-                        writer.write(example.SerializeToString())
+                        self.writer.write(example.SerializeToString())
+
         
-        writer.close()
         print(f'total_number: {cnt}')
+
     def create_pca(self):
 
         from sklearn.decomposition import PCA
@@ -258,11 +266,21 @@ class ImageMesh2TFRecord_Converter():
 
 
 def main(argv):
-    conveter = ImageMesh2TFRecord_Converter(FLAGS.record_pth, FLAGS.data_pth)
+
+    assert not Path(FLAGS.record_pth).exists(
+    ), f'There exist a TFRecord file at "{FLAGS.record_pth}".'
+    
+    writer = tf.io.TFRecordWriter(str(FLAGS.record_pth))
+    
+    for sub in subjects:
+        conveter = ImageMesh2TFRecord_Converter(
+            FLAGS.record_pth, f'/home/aaron/Desktop/multiface/{sub}', writer)
+        conveter.create_tfrecord()
+        
+    writer.close()
     # conveter.create_pca()
-    conveter.create_tfrecord()
 
 
 if __name__ == '__main__':
-    flags.mark_flags_as_required(['record_pth', 'data_pth'])
+    flags.mark_flags_as_required(['record_pth'])
     app.run(main)
