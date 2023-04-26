@@ -50,8 +50,7 @@ def load_obj(pth):
             return True, vertices
 
 
-# neutral face model
-neutral_mesh = tf.convert_to_tensor(np.array(load_obj('../training_data/000220.obj')[1]).flatten(), dtype=tf.float32)
+
 
 
 def readTFRECORD(tfrecord_pth: str,
@@ -61,7 +60,7 @@ def readTFRECORD(tfrecord_pth: str,
     data_set = data_set.repeat()
 
     data_set = data_set.map(parse, num_parallel_calls=AUTOTUNE)
-    data_set = data_set.shuffle(config.data_size,
+    data_set = data_set.shuffle(config.data_size//2,
                                 reshuffle_each_iteration=True)
     data_batch = data_set.batch(config.batch_size, drop_remainder=True)
     data_batch = data_batch.prefetch(buffer_size=AUTOTUNE)
@@ -87,8 +86,15 @@ def parse(example_proto):
 
     # standardize
     vtx = (vtx - vert_mean) / tf.sqrt(vert_var)
+    # neutral face model
+    neutral_mesh = tf.convert_to_tensor(np.array(load_obj('../training_data/000220.obj')[1]).flatten(), dtype=tf.float32)
+    neutral_mesh = (neutral_mesh-vert_mean) / tf.sqrt(vert_var)
+    
+    # reshape
     img = tf.reshape(img, [IMAGE_HEIGHT, IMAGE_WIDTH, 3])
-    vtx = tf.reshape(vtx, [NUM_VERTEX, 3])
+    img = ((img / 255)) * 2 -1
+    vtx = tf.reshape(vtx, [NUM_VERTEX*3])
+    
     # img = tf.image.resize(img, [IMAGE_HEIGHT_RESIZE, IMAGE_WIDTH_RESIZE])
 
     return {'img': img, 'neutral_vtx': neutral_mesh, 'vtx': vtx}

@@ -85,7 +85,7 @@ class VertexUNet(nn.Module):
             x = nn.leaky_relu(x, negative_slope=0.2)
             x = skips[i] + x
 
-        x = einops.rearrange(x, 'b (v c) -> b v c', v=self.mesh_vertexes, c=3)
+        # x = einops.rearrange(x, 'b (v c) -> b v c', v=self.mesh_vertexes, c=3)
 
         return x
 

@@ -104,10 +104,10 @@ def create_input_iter(ds):
 
 def compute_metrics(y_pred, y_true):
     mse = mean_square_error_loss(y_pred, y_true)
-    chamfer = chamfer_distance_loss(y_pred, y_true)
+    # chamfer = chamfer_distance_loss(y_pred, y_true)
     # loss = earth_mover_distance_loss(y_pred, y_true)
 
-    metrics = {'mse': mse, 'chamfer': chamfer}
+    metrics = {'mse': mse}
     metrics = lax.pmean(metrics, axis_name='batch')
     return metrics
 
