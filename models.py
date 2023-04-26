@@ -16,7 +16,7 @@ class ExpressionEncoder(nn.Module):
     num_strides: Sequence[int]
     code: int = 128
     dtype: Any = jnp.float16
-    conv: ModuleDef = nn.conv
+    conv: ModuleDef = nn.Conv
 
     @nn.compact
     def __call__(self, x, training: bool = True):
@@ -27,11 +27,11 @@ class ExpressionEncoder(nn.Module):
 
         for i, filters in enumerate(self.num_filters):
             x = conv(filters, (3, 3), self.num_strides[i], name=f'conv{i}')(x)
-            x = nn.leaky_relu(0.2)(x)
+            x = nn.leaky_relu(x, negative_slope=0.2)
 
         x = einops.rearrange(x, 'b h w c -> b (h w c)')
         x = nn.Dropout(rate=0.2)(x, deterministic=not training)
-        x = nn.Dense(self.code)
+        x = nn.Dense(self.code)(x)
 
         return x
 
@@ -59,33 +59,34 @@ class VertexUNet(nn.Module):
         expr_encoder = ExpressionEncoder(num_filters=self.expr_filters,
                                          num_strides=self.expr_strides,
                                          code=self.expr_code)
-
-        self.decoding_unints[-1] = self.mesh_vertexes * 3
+        # print(type(self.decoding_unints))
+        # self.decoding_unints[-1] = self.mesh_vertexes * 3
         dense = partial(self.dense,
                         use_bias=True,
-                        dtype=self.dtype,
-                        kernel_initializer=nn.initializers.he_uniform)
+                        dtype=self.dtype,)
         skips = []
 
+      
         #expression encoder
-        expr_encoding = expr_encoder(img)
+        expr_encoding = expr_encoder(img, training=training)
 
         #Encoding
-        for i, units in enumerate(self.num_units):
+        for i, units in enumerate(self.enconding_units):
             skips = [x] + skips
+
             x = dense(units, name=f'Encoding_Dense_{i}')(x)
-            x = nn.leaky_relu(0.2)(x)
+            x = nn.leaky_relu(x, negative_slope=0.2)
 
         x = jnp.concatenate([x, expr_encoding], axis=-1)
 
         #Decoding
         for i, units in enumerate(self.decoding_unints):
-            x = dense(units, name=f'Decoding_Dense_{i}')
-            x = nn.leaky_relu(0.2)(x)
+            x = dense(units, name=f'Decoding_Dense_{i}')(x)
+            x = nn.leaky_relu(x, negative_slope=0.2)
             x = skips[i] + x
 
-        x = einops.rearrange(x, 'b (v c) -> b v c', c=3)
-        
+        x = einops.rearrange(x, 'b (v c) -> b v c', v=self.mesh_vertexes, c=3)
+
         return x
 
 
@@ -129,7 +130,7 @@ Classic_CNN = partial(
     num_strides=[(2, 2), (1, 1), (2, 2), (1, 1), (2, 2), (1, 1), (2, 2),
                  (1, 1), (2, 2), (1, 1), (2, 2), (1, 1)])
 
-Classic_UNET = partial(VertexUNet,
+Classic_UNet = partial(VertexUNet,
                        enconding_units=[512, 256, 128],
                        decoding_unints=[256, 512, 7306 * 3],
                        expr_filters=[16, 16, 32, 32, 64, 64, 128, 128],

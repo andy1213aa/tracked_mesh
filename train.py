@@ -26,6 +26,7 @@ import optax
 import models
 from scipy.optimize import linear_sum_assignment
 
+
 def get_pca_coef(pca_pth):
     import pickle
     with open(pca_pth, 'rb') as f:
@@ -49,18 +50,21 @@ def prepare_tf_data(xs):
     return jax.tree_util.tree_map(_prepare, xs)
 
 
-def inititalized(key, image_size, model):
-    input_shape = (1, image_size[0], image_size[1], 3)
+def inititalized(key, image_size, vertex_size, model):
+    img_shape = (1, image_size[0], image_size[1], 3)
+    vertex_shape = (
+        1,
+        vertex_size * 3,
+    )
 
     @jax.jit
     def init(*args):
+        # Dropout is disabled with `training=False` (that is, `deterministic=True`).
         return model.init(*args, training=False)
 
-    # Dropout is disabled with `training=False` (that is, `deterministic=True`).
-    variables = init({'params': key},
-                     jnp.ones(input_shape, model.dtype)
-                     )
-    print(parameter_overview.get_parameter_overview(variables))
+    variables = init({'params': key}, jnp.ones(vertex_shape, model.dtype),
+                     jnp.ones(img_shape, model.dtype))
+    logging.info(parameter_overview.get_parameter_overview(variables))
     return variables
 
 
@@ -77,8 +81,6 @@ def chamfer_distance_loss(pred_points, gt_points):
     gt_to_pred = jnp.min(distance, axis=0)
     loss = jnp.mean(pred_to_gt) + jnp.mean(gt_to_pred)
     return loss
-
-
 
 
 def restore_checkpoint(state, workdir):
@@ -105,10 +107,7 @@ def compute_metrics(y_pred, y_true):
     chamfer = chamfer_distance_loss(y_pred, y_true)
     # loss = earth_mover_distance_loss(y_pred, y_true)
 
-    metrics = {
-        'mse': mse, 
-        'chamfer': chamfer
-    }
+    metrics = {'mse': mse, 'chamfer': chamfer}
     metrics = lax.pmean(metrics, axis_name='batch')
     return metrics
 
@@ -119,11 +118,13 @@ class TrainState(train_state.TrainState):
     dynamic_scale: dynamic_scale_lib.DynamicScale
 
 
-def create_model(model_cls, config, pca_coef, **kwargs):
+def create_model(model_cls, config, **kwargs):
 
-    return model_cls(mesh_vertexes=config.vertex,
-                     dtype=jnp.float32,
-                     pca_coef=pca_coef)
+    return model_cls(mesh_vertexes=config.vertex, dtype=jnp.float32)
+
+    # return model_cls(mesh_vertexes=config.vertex,
+    #                  dtype=jnp.float32,
+    #                  pca_coef=pca_coef)
 
 
 def create_learning_rate_fn(config: ml_collections.ConfigDict,
@@ -135,13 +136,13 @@ def create_learning_rate_fn(config: ml_collections.ConfigDict,
                                       steps_per_epoch)
     #inverse square root decay
     # ISR_fn = optax.constant_schedule(
-        
+
     # )
     cosine_epochs = max(config.num_epochs - config.warmup_epochs, 1)
     consine_fn = optax.cosine_decay_schedule(init_value=base_learning_rate,
                                              decay_steps=cosine_epochs *
                                              steps_per_epoch)
-    
+
     # optax.exponential_decay(init_value=consine_fn,decay_rate=)
     schedule_fn = optax.join_schedules(
         schedules=[warmup_fn, consine_fn],
@@ -151,11 +152,12 @@ def create_learning_rate_fn(config: ml_collections.ConfigDict,
     # return warmup_fn
 
 
-def create_train_state(params_key, dropout_key, config: ml_collections.ConfigDict, model,
-                       image_size, learning_rate_fn):
+def create_train_state(params_key, dropout_key,
+                       config: ml_collections.ConfigDict, model, image_size,
+                       learning_rate_fn):
     """Create initital training state."""
 
-    variables = inititalized(params_key, image_size, model)
+    variables = inititalized(params_key, image_size, config.vertex, model)
     tx = optax.adam(learning_rate=learning_rate_fn, b1=0.9, b2=0.999)
     # tx = optax.tx = optax.rmsprop(learning_rate=learning_rate_fn, eps=1e-4)
     state = TrainState.create(
@@ -174,14 +176,15 @@ def train_step(state, batch, learning_rate_fn, dropout_key):
         """loss function used for training."""
         # Dropout is enabled with `training=True` (that is, `deterministic=False`).
         pred = state.apply_fn({'params': params},
-                              x=batch['img'],
+                              x=batch['neutral_vtx'],
+                              img=batch['img'],
                               training=True,
                               rngs={'dropout': dropout_train_key})
-        
-        # loss = mean_square_error_loss(pred, batch['vtx'])
-        loss = chamfer_distance_loss(pred, batch['vtx'])
+
+        loss = mean_square_error_loss(pred, batch['vtx'])
+        # loss = chamfer_distance_loss(pred, batch['vtx'])
         # loss = earth_mover_distance_loss(pred, batch['vtx'])
-        
+
         return loss, pred
 
     step = state.step
@@ -223,15 +226,16 @@ def train_and_evalutation(config: ml_collections.ConfigDict, workdir: str,
 
     model_cls = getattr(models, config.model)
 
-    model = create_model(model_cls, config, get_pca_coef(config.pca))
+    model = create_model(model_cls, config)
+    # model = create_model(model_cls, config, get_pca_coef(config.pca))
 
     base_learning_rate = config.learning_rate
 
     learning_rate_fn = create_learning_rate_fn(config, base_learning_rate,
                                                steps_per_epoch)
 
-    state = create_train_state(params_key, dropout_key,config, model, config.image_size,
-                               learning_rate_fn)
+    state = create_train_state(params_key, dropout_key, config, model,
+                               config.image_size, learning_rate_fn)
 
     state = restore_checkpoint(state, workdir)
     # step_offset > 0 if restarting from checkpoint

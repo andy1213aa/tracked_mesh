@@ -1,7 +1,11 @@
 import tensorflow as tf
 import numpy as np
 import ml_collections
-
+from absl import logging
+from pathlib import Path
+# Hide any GPUs from TensorFlow. Otherwise TF might reserve memory and make
+# it unavailable to JAX.
+tf.config.set_visible_devices([], 'GPU')
 IMAGE_WIDTH = 240
 IMAGE_HEIGHT = 320
 
@@ -14,6 +18,40 @@ NUM_VERTEX = 7306
 vert_mean = np.load('../training_data/6674443_vert_mean.npy')
 # 1 float32
 vert_var = np.load('../training_data/6674443_vert_var.npy')
+
+
+def load_obj(pth):
+
+    def is_number(s):
+        try:
+            float(s)
+            return True
+        except ValueError:
+            return False
+
+    obj_pth = Path(pth)
+
+    if not obj_pth.exists:
+        logging.info(f'file {obj_pth} does not exist')
+        return None, False
+    else:
+        with open(obj_pth, 'r') as f:
+            vertices = []
+            for line in f:
+                if 'v' in line and 'vn' not in line and 'vt' not in line:
+
+                    v = [
+                        float(x) for x in list(
+                            filter(lambda x: is_number(x), line.split()))
+                    ]
+                    vertices.append(v)
+                if 'f' in line:
+                    break
+            return True, vertices
+
+
+# neutral face model
+neutral_mesh = tf.convert_to_tensor(np.array(load_obj('../training_data/000220.obj')[1]).flatten(), dtype=tf.float32)
 
 
 def readTFRECORD(tfrecord_pth: str,
@@ -53,4 +91,4 @@ def parse(example_proto):
     vtx = tf.reshape(vtx, [NUM_VERTEX, 3])
     # img = tf.image.resize(img, [IMAGE_HEIGHT_RESIZE, IMAGE_WIDTH_RESIZE])
 
-    return {'img': img, 'vtx': vtx}
+    return {'img': img, 'neutral_vtx': neutral_mesh, 'vtx': vtx}
