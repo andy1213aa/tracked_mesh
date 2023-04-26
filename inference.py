@@ -141,12 +141,13 @@ def inference(
 
     state = restore_checkpoint(state, workdir)
 
-    facial = 'E041_Mouth_Nose_Right'
+    subject = '7889059'
+    facial = 'E001_Neutral_Eyes_Open'
     view = '400002'
-    idx = '019278'
+    idx = '000123'
 
     img = cv2.imread(
-        f'/home/aaron/Desktop/multiface/6674443_GHS/images/{facial}/{view}/{idx}.png'
+        f'/home/aaron/Desktop/multiface/{subject}_GHS/images/{facial}/{view}/{idx}.png'
     )
 
     img = cv2.resize(img, config.image_size)
@@ -161,7 +162,7 @@ def inference(
     pred_cpu = einops.rearrange(pred_cpu, 'b v c -> (b v) c', c=3)  #b = 1
 
     res, vertex_true = load_obj(
-        f'/home/aaron/Desktop/multiface/6674443_GHS/geom/tracked_mesh/{facial}/{idx}.obj'
+        f'/home/aaron/Desktop/multiface/{subject}_GHS/geom/tracked_mesh/{facial}/{idx}.obj'
     )
     vertex_true = np.array(vertex_true)
 
@@ -172,23 +173,22 @@ def inference(
 
     total_lines = 0
     with open(
-            f'/home/aaron/Desktop/multiface/6674443_GHS/geom/tracked_mesh/{facial}/{idx}.obj',
+            f'/home/aaron/Desktop/multiface/{subject}_GHS/geom/tracked_mesh/{facial}/{idx}.obj',
             'r') as f:
         total_lines = len(f.readlines())
 
     print(total_lines)
     txt = ''
     with open(
-            f'/home/aaron/Desktop/multiface/6674443_GHS/geom/tracked_mesh/{facial}/{idx}.obj',
+            f'/home/aaron/Desktop/multiface/{subject}_GHS/geom/tracked_mesh/{facial}/{idx}.obj',
             'r') as f:
         for i in range(7306):
             f.readline()
             txt += f'v {pred_cpu[i][0]} {pred_cpu[i][1]} {pred_cpu[i][2]}\n'
         for _ in range(7306, total_lines):
-         
+
             txt += f.readline()
 
-    
     with open('../test_data/test.obj', 'w') as w:
         w.write(txt)
     # with open(f'{idx}.obj', 'w') as f:

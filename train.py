@@ -3,6 +3,7 @@ import numpy as np
 import ml_collections
 from clu import metric_writers
 from clu import periodic_actions
+from clu import parameter_overview
 import einops
 from flax import jax_utils
 from flax.training import checkpoints
@@ -59,7 +60,7 @@ def inititalized(key, image_size, model):
     variables = init({'params': key},
                      jnp.ones(input_shape, model.dtype)
                      )
-
+    print(parameter_overview.get_parameter_overview(variables))
     return variables
 
 
