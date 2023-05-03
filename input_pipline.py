@@ -51,8 +51,6 @@ def load_obj(pth):
 
 
 
-
-
 def readTFRECORD(tfrecord_pth: str,
                  config: ml_collections.ConfigDict) -> tf.data:
     AUTOTUNE = tf.data.experimental.AUTOTUNE
@@ -85,14 +83,14 @@ def parse(example_proto):
     vtx = tf.io.decode_raw(vtx, np.float32)
 
     # standardize
-    vtx = (vtx - vert_mean) / tf.sqrt(vert_var)
+    # vtx = (vtx - vert_mean) / tf.sqrt(vert_var)
     # neutral face model
     neutral_mesh = tf.convert_to_tensor(np.array(load_obj('../training_data/000220.obj')[1]).flatten(), dtype=tf.float32)
-    neutral_mesh = (neutral_mesh-vert_mean) / tf.sqrt(vert_var)
+    # neutral_mesh = (neutral_mesh-vert_mean) / tf.sqrt(vert_var)
     
     # reshape
     img = tf.reshape(img, [IMAGE_HEIGHT, IMAGE_WIDTH, 3])
-    img = ((img / 255)) * 2 -1
+    # img = ((img / 255)) * 2 -1
     vtx = tf.reshape(vtx, [NUM_VERTEX*3])
     
     # img = tf.image.resize(img, [IMAGE_HEIGHT_RESIZE, IMAGE_WIDTH_RESIZE])

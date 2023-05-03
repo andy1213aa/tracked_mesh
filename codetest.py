@@ -1,24 +1,47 @@
 import jax
+import jax.numpy as jnp
 import numpy as np
 from flax import linen as nn
 from clu import parameter_overview
+import torch
+import ffmpeg
+import numpy as np
+import torch as th
+from pytorch3d.io import load_obj
+from pytorch3d.structures import Meshes
+from pytorch3d.renderer import (
+    look_at_view_transform,
+    PerspectiveCameras,
+    PointLights,
+    RasterizationSettings,
+    MeshRenderer,
+    MeshRasterizer,
+    SoftPhongShader,
+    Textures,
+)
 
-class CNN(nn.Module):
-  @nn.compact
-  def __call__(self, x):
-    x = nn.Conv(features=32, kernel_size=(3, 3))(x)
-    x = nn.relu(x)
-    x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
-    x = nn.Conv(features=64, kernel_size=(3, 3))(x)
-    x = nn.relu(x)
-    x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
-    x = x.reshape((x.shape[0], -1))  # flatten
-    x = nn.Dense(features=256)(x)
-    x = nn.relu(x)
-    x = nn.Dense(features=10)(x)
-    x = nn.log_softmax(x)
-    return x
+# 创建一个 PyTorch 张量并将其移动到 CUDA 设备上
+x_torch = torch.randn(3, 4).cuda()
 
-key = jax.random.PRNGKey(0)
-variables = CNN().init(key, np.random.randn(1, 32, 32, 3))
-print(parameter_overview.get_parameter_overview(variables))
+# 将 PyTorch 张量转换为 JAX 数组
+x_jax = jax.device_put(x_torch)
+
+# 打印 JAX 数组的类型、形状和数据类型
+print(type(x_jax))  # <class 'jax.interpreters.xla.DeviceArray'>
+print(x_jax.shape)  # (3, 4)
+print(x_jax.dtype)  # float32
+
+
+# # 创建一个 PyTorch 张量并将其移动到 CUDA 设备上
+# x_torch = torch.randn(3, 4).cuda()
+
+# # 将 PyTorch 张量转换为 NumPy 数组
+# x_numpy = x_torch.cpu().detach().numpy()
+
+# # 将 NumPy 数组转换为 JAX 数组
+# x_jax = jnp.array(x_numpy)
+
+# # 打印 JAX 数组的类型、形状和数据类型
+# print(type(x_jax))  # <class 'jax.interpreters.xla.DeviceArray'>
+# print(x_jax.shape)  # (3, 4)
+# print(x_jax.dtype)  # float32
