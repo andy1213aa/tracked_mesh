@@ -76,3 +76,8 @@ with torch.no_grad():
         )
     )
     images = renderer(meshes)
+    
+img = 255*images.cpu().contiguous().numpy()
+img = img.astype('uint8')
+img = img[0, :, :, :3]
+plt.imshow(img)
