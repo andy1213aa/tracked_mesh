@@ -10,8 +10,6 @@ import einops
 from sklearn.decomposition import PCA
 import pickle
 
-
-
 IMAGE_WIDTH_RESIZE = 240  #240
 IMAGE_HEIGHT_RESIZE = 320  #320
 PCA_NUM = 160
@@ -36,10 +34,9 @@ subjects = [
 ]
 
 types = [
-    'E001_Neutral_Eyes_Open',
-    'E003_Neutral_Eyes_Closed',  "E006_Jaw_Drop_Brows_Up",
-    "E007_Neck_Stretch_Brows_Up", "E008_Smile_Mouth_Closed",
-    "E009_Smile_Mouth_Open", "E010_Smile_Stretched",
+    'E001_Neutral_Eyes_Open', 'E003_Neutral_Eyes_Closed',
+    "E006_Jaw_Drop_Brows_Up", "E007_Neck_Stretch_Brows_Up",
+    "E008_Smile_Mouth_Closed", "E009_Smile_Mouth_Open", "E010_Smile_Stretched",
     "E011_Jaw_Open_Sharp_Corner_Lip_Stretch", "E012_Jaw_Open_Huge_Smile",
     "E013_Open_Lips_Mouth_Stretch_Nose_Wrinkled",
     "E014_Open_Mouth_Stretch_Nose_Wrinkled", "E015_Jaw_Open_Upper_Lip_Raised",
@@ -111,11 +108,10 @@ types = [
     "SEN_with_each_song_he_gave_verbal_footnotes",
     "SEN_youre_boiling_milk_aint_you"
 ]
-
 '''
 data with right mp face landmark detection.
 '''
-views=['400009','400013', '400015','400037', '400041']  
+views = ['400009', '400013', '400015', '400037', '400041']
 # views = [
 #     "400002", "400007", "40009", "400012", "400013", "400015", "400016",
 #     , "400019", "400023", "400029", "400030", "400031", "400037",
@@ -267,7 +263,7 @@ class ImageMesh2TFRecord_Converter():
 
         total_mesh = np.array(total_mesh)
         total_mesh = einops.rearrange(total_mesh, 'b v c -> b (v c)')
-        
+
         return total_mesh
 
 
@@ -294,10 +290,10 @@ def main(argv):
 
     #         pca = conveter.create_pca()
     #     pca = self.writer.fit(total_mesh)
-        
-        # with open('pca.pickle', 'wb') as f:
-        #     pickle.dump(pca, f)
-        # logging.info(f"Finish PCA; n_com = {PCA_NUM}")
+
+    # with open('pca.pickle', 'wb') as f:
+    #     pickle.dump(pca, f)
+    # logging.info(f"Finish PCA; n_com = {PCA_NUM}")
     else:
         logging.info('Nothing to do.')
         logging.info('Use --pca or --tfrecord to assign the job.')
