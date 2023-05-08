@@ -9,23 +9,9 @@ import numpy as np
 import einops
 from sklearn.decomposition import PCA
 import pickle
-
-IMAGE_WIDTH_RESIZE = 240  #240
-IMAGE_HEIGHT_RESIZE = 320  #320
-PCA_NUM = 160
-VERTEX_NUM = 7306
+# from pytorch3d.io import load_obj
 
 FLAGS = flags.FLAGS
-flags.DEFINE_string('record_pth',
-                    default=None,
-                    help='The directory where TFRecord file save.')
-
-flags.DEFINE_string('data_pth',
-                    default=None,
-                    help='The directory of data root.')
-flags.DEFINE_bool('pca', default=False, help='Do pca modeling.')
-flags.DEFINE_bool('tfrecord', default=False, help='Build tfrecord data.')
-
 subjects = [
     '6674443_GHS'
     # '2183941_GHS', '002539136_GHS', '002643814_GHS', '002757580_GHS',
@@ -33,8 +19,20 @@ subjects = [
     # '7889059_GHS', '8870559_GHS'
 ]
 
+flags.DEFINE_string('record_pth',
+                    default=None,
+                    help='The directory where TFRecord file save.')
+
+flags.DEFINE_string('data_pth',
+                    default=None,
+                    help='The directory of data root.')
+
+flags.DEFINE_integer('n_com',
+                     default=160,
+                     help='The components of linear PCA model.')
 types = [
-    'E001_Neutral_Eyes_Open', 'E003_Neutral_Eyes_Closed',
+    'E001_Neutral_Eyes_Open',
+    'E003_Neutral_Eyes_Closed',
     "E006_Jaw_Drop_Brows_Up", "E007_Neck_Stretch_Brows_Up",
     "E008_Smile_Mouth_Closed", "E009_Smile_Mouth_Open", "E010_Smile_Stretched",
     "E011_Jaw_Open_Sharp_Corner_Lip_Stretch", "E012_Jaw_Open_Huge_Smile",
@@ -108,9 +106,9 @@ types = [
     "SEN_with_each_song_he_gave_verbal_footnotes",
     "SEN_youre_boiling_milk_aint_you"
 ]
-'''
-data with right mp face landmark detection.
-'''
+
+#data with right mp face landmark detection.
+
 views = ['400009', '400013', '400015', '400037', '400041']
 # views = [
 #     "400002", "400007", "40009", "400012", "400013", "400015", "400016",
@@ -120,159 +118,59 @@ views = ['400009', '400013', '400015', '400037', '400041']
 # ]
 
 
-class ImageMesh2TFRecord_Converter():
+class Mesh2PCA():
 
-    def __init__(self, records_path: str, data_pth: str,
-                 tfrecord_writer: object):
+    def __init__(self, records_path: str, data_pth: str):
         self._records_path = Path(records_path)
-        # assert not self._records_path.exists(
-        # ), f'There exist a TFRecord file at "{self._records_path}".'
+        assert not self._records_path.exists(
+        ), f'There exists a file at "{self._records_path}".'
 
         self._data_pth = Path(data_pth)
         assert self._data_pth.exists(), 'The data_pth is not exist.'
 
-        self._images_pth = Path(f'{data_pth}/images')
+        self._images_pth = Path(f'{data_pth}/images')  # no use in pca.
         self._geom_pth = Path(f'{data_pth}/geom/')
-        self.writer = tfrecord_writer
 
-    def _load_obj(self, pth):
-
-        def is_number(s):
-            try:
-                float(s)
-                return True
-            except ValueError:
-                return False
-
-        obj_pth = Path(pth)
-
-        if not obj_pth.exists:
-            logging.info(f'file {obj_pth} does not exist')
-            return None, False
-        else:
-            with open(obj_pth, 'r') as f:
-                vertices = []
-                for line in f:
-                    if 'v' in line and 'vn' not in line and 'vt' not in line:
-
-                        v = [
-                            float(x) for x in list(
-                                filter(lambda x: is_number(x), line.split()))
-                        ]
-                        vertices.append(v)
-                    if 'f' in line:
-                        break
-                return True, vertices
-
-    def _load_image(self, pth):
-        if pth.exists():
-            img = cv2.imread(str(pth))
-            return True, img
-        return False, ''
-
-    def create_tfrecord(self):
-        """Create the TFRecord
-        
-        Folder Structure:
-        
-        data/
-        |--geom
-        |  |--tracked_mesh
-        |     |--type1
-        |     |--type2
-        |     |   ...
-        |     |__typeN
-        |  
-        |--images
-        |  |--angle1
-        |  |  |--type1
-        |  |  |--type2
-        |  |  |  ...
-        |  |  |__typeN
-        |  |  
-        |  |--angle2
-        |  |   ...
-        |  |__angleN
-        |     |--type1
-        |     |--type2
-        |     |  ...160
-        |     |__typeN
-        
-        
-        """
-
+    def create_pca(self, n_com: int):
+        pca = PCA(n_com)
         cnt = 0
-        for typ in types:  # list
-
+        total_verts = []
+        for typ in types:
             # Read Mesh
-            mesh_pth = Path(f'{self._geom_pth}/tracked_mesh/{typ}')
+            type_pth = Path(f'{self._geom_pth}/tracked_mesh/{typ}')
+            mesh_pth = [pth for pth in type_pth.glob('*.bin')]
 
-            type_pth = Path(f'{self._images_pth}/{typ}')
-            camera_angle_pths = [
-                pth for pth in type_pth.glob('*')
-                if pth.is_dir() and pth.stem in views
-            ]
+            for pth in mesh_pth:
+                logging.info(pth)
+                # res_mesh, mesh = self._load_obj(Path(f'{pth}'))
+                # 读取二进制文件
+                with open(Path(f'{pth}'), 'rb') as f:
+                    # 读取数据
+                    data = f.read()
 
-            for ang_pth in camera_angle_pths:
-                images_pth = [pth for pth in ang_pth.glob('*.png')]
+                # 解析数据
+                verts = np.frombuffer(data, dtype=np.float32)
+                total_verts.append(verts)
 
-                for img_pth in images_pth:
-                    idx = img_pth.stem
-                    with open(Path(f'{mesh_pth}/{idx}.bin'), 'rb') as f:
-                        # 读取数据
-                        data = f.read()
+        total_verts = np.array(total_verts)
+        # total_verts = einops.rearrange(total_verts, 'b v c -> b (v c)')
+        print(total_verts.shape)
+        pca.fit(total_verts)
+        with open(self._records_path, 'wb') as f:
+            pickle.dump(pca, f)
 
-                    # 解析数据
-                    mesh = np.frombuffer(data, dtype=np.float32)
-
-                    # res_mesh, mesh = self._load_obj(
-                    #     Path(f'{mesh_pth}/{idx}.obj'))
-                    res_img, img = self._load_image(img_pth)
-                    if res_img:
-
-                        img = img.astype(np.float32)
-                        img = cv2.resize(
-                            img, [IMAGE_HEIGHT_RESIZE, IMAGE_WIDTH_RESIZE])
-                        # mesh = np.array(mesh).astype(np.float32)
-                        print('--------------------------')
-                        print(f'Obj: {mesh_pth}/{idx}.obj')
-                        print(f'Img: {img_pth}')
-                        example = tf.train.Example(features=tf.train.Features(
-                            feature={
-                                "img":
-                                tf.train.Feature(bytes_list=tf.train.BytesList(
-                                    value=[img.tobytes()])),
-                                "vtx":
-                                tf.train.Feature(bytes_list=tf.train.BytesList(
-                                    value=[mesh.tobytes()]))
-                            }))
-                        cnt += 1
-
-                        # if cnt % 100 == 0:
-                        #     logging.info(f'Finished {cnt} data.')
-                        self.writer.write(example.SerializeToString())
-
-        print(f'total_number: {cnt}')
+        logging.info(f"Finish PCA at {self._records_path}; n_com = {n_com}")
 
 
 def main(argv):
 
-    assert not Path(FLAGS.record_pth).exists(
-    ), f'There exist a TFRecord file at "{FLAGS.record_pth}".'
-
-    writer = tf.io.TFRecordWriter(str(FLAGS.record_pth))
-
     for sub in subjects:
-        conveter = ImageMesh2TFRecord_Converter(FLAGS.record_pth,
-                                                FLAGS.data_pth + f'/{sub}',
-                                                writer)
-        conveter.create_tfrecord()
+        conveter = Mesh2PCA(FLAGS.record_pth,
+                            f'/home/aaron/Desktop/multiface/{sub}')
 
-    writer.close()
+        conveter.create_pca(FLAGS.n_com)
 
 
 if __name__ == '__main__':
-    flags.mark_flags_as_required(['record_pth'])
+    flags.mark_flags_as_required(['data_pth', 'record_pth', 'n_com'])
     app.run(main)
-
-#f'/home/aaron/Desktop/multiface/{sub}'
