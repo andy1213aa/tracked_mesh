@@ -266,7 +266,7 @@ class ImageMesh2TFRecord_Converter():
                     verts_uvs = aux.verts_uvs
                     faces_uvs = faces.textures_idx
                     verts_idx = faces.verts_idx
-
+                
                     # read 2D image
                     res_img, img = self._load_image(img_pth)
 

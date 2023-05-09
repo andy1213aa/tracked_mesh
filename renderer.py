@@ -12,6 +12,13 @@ class Renderer():
     def __init__(self, device: str = 'cuda:0'):
         self.device = device
 
+    def _split_batch_to_list(self, tensor):
+        # split the tensor along the first dimension
+        tensor = torch.split(tensor, split_size_or_sections=1, dim=0)
+        # # remove the first dimension from each tensor in the list
+        tensor = [t.squeeze(0).to(self.device) for t in tensor]
+        return tensor
+    
     def _linear_transform(self, verts, transform):
         """
             對一個 batch 的頂點進行線性轉換
@@ -23,16 +30,16 @@ class Renderer():
         """
         batch_size, num_verts, _ = verts.shape
         R = transform[:, :3, :3]
-        t = transform[:, :, 3].unsqueeze(2)
+        t = transform[:, :, 3].unsqueeze(1)
         verts = torch.bmm(R, verts.transpose(1, 2)).transpose(1, 2) + t
         return verts
 
     def render(self, verts, faces_uvs, verts_uvs, verts_idx, texture_image, transform_head,
                transform_camera, focal, princpt, render_width, render_height):
 
-        verts_uvs = aux.verts_uvs[None, ...]  # (1, V, 2)
-        faces_uvs = faces.textures_idx[None, ...]  # (1, F, 3)
-
+        # verts_uvs = aux.verts_uvs[None, ...]  # (1, V, 2)
+        # faces_uvs = faces.textures_idx[None, ...]  # (1, F, 3)
+        
         tex = Textures(verts_uvs=verts_uvs,
                        faces_uvs=faces_uvs,
                        maps=texture_image)
@@ -40,8 +47,8 @@ class Renderer():
         verts_head = self._linear_transform(verts, transform_head)
         verts_cam = self._linear_transform(verts_head, transform_camera)
 
-        meshes = Meshes(verts=[verts_cam.to(self.device)],
-                        faces=[verts_idx.to(self.device)],
+        meshes = Meshes(verts=self._split_batch_to_list(verts_cam),
+                        faces=self._split_batch_to_list(verts_idx),
                         textures=tex.to(self.device))
 
         cameras = PerspectiveCameras(device=self.device,
@@ -66,5 +73,5 @@ class Renderer():
                                                            cameras=cameras,
                                                            lights=lights))
             images = renderer(meshes, znear=0.0, zfar=1500.0)
-            images *= 255
-            return images
+
+        return images
