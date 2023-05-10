@@ -1,5 +1,7 @@
 import torch
 import numpy as np
+import jax.dlpack as jdl
+
 from pytorch3d.renderer import (PointLights, MeshRenderer,
                                 RasterizationSettings, MeshRasterizer,
                                 SoftPhongShader, Textures, PerspectiveCameras)
@@ -18,7 +20,7 @@ class Renderer():
         # # remove the first dimension from each tensor in the list
         tensor = [t.squeeze(0).to(self.device) for t in tensor]
         return tensor
-    
+
     def _linear_transform(self, verts, transform):
         """
             對一個 batch 的頂點進行線性轉換
@@ -34,12 +36,45 @@ class Renderer():
         verts = torch.bmm(R, verts.transpose(1, 2)).transpose(1, 2) + t
         return verts
 
-    def render(self, verts, faces_uvs, verts_uvs, verts_idx, texture_image, transform_head,
-               transform_camera, focal, princpt, render_width, render_height):
+    def _jax2torch(self, verts, faces_uvs, verts_uvs, verts_idx, texture_image,
+                   transform_head, transform_camera, focal, princpt):
+
+        return (torch.from_dlpack(jdl.to_dlpack(verts)),
+                torch.from_dlpack(jdl.to_dlpack(faces_uvs)),
+                torch.from_dlpack(jdl.to_dlpack(verts_uvs)),
+                torch.from_dlpack(jdl.to_dlpack(verts_idx)),
+                torch.from_dlpack(jdl.to_dlpack(texture_image)),
+                torch.from_dlpack(jdl.to_dlpack(transform_head)),
+                torch.from_dlpack(jdl.to_dlpack(transform_camera)),
+                torch.from_dlpack(jdl.to_dlpack(focal)),
+                torch.from_dlpack(jdl.to_dlpack(princpt)))
+
+    def render(self,
+               verts,
+               faces_uvs,
+               verts_uvs,
+               verts_idx,
+               texture_image,
+               transform_head,
+               transform_camera,
+               focal,
+               princpt,
+               render_width,
+               render_height,
+               preprocess=True):
+
+        if preprocess:
+            (verts, faces_uvs, verts_uvs, verts_idx, texture_image,
+             transform_head, transform_camera, focal, princpt, render_width,
+             render_height) = self._jax2torch(verts, faces_uvs, verts_uvs,
+                                              verts_idx, texture_image,
+                                              transform_head, transform_camera,
+                                              focal, princpt, render_width,
+                                              render_height)
 
         # verts_uvs = aux.verts_uvs[None, ...]  # (1, V, 2)
         # faces_uvs = faces.textures_idx[None, ...]  # (1, F, 3)
-        
+
         tex = Textures(verts_uvs=verts_uvs,
                        faces_uvs=faces_uvs,
                        maps=texture_image)

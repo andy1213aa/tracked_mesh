@@ -25,6 +25,10 @@ from typing import Any
 import optax
 import models
 from scipy.optimize import linear_sum_assignment
+from renderer import Renderer
+from face_landmark import FaceMesh
+import jax.dlpack as jdl
+import torch
 
 
 def get_pca_coef(pca_pth):
@@ -52,10 +56,7 @@ def prepare_tf_data(xs):
 
 def inititalized(key, image_size, vertex_size, model):
     img_shape = (1, image_size[0], image_size[1], 3)
-    vertex_shape = (
-        1,
-        vertex_size * 3,
-    )
+    vertex_shape = (1, vertex_size//3, 3)
 
     @jax.jit
     def init(*args):
@@ -118,13 +119,14 @@ class TrainState(train_state.TrainState):
     dynamic_scale: dynamic_scale_lib.DynamicScale
 
 
-def create_model(model_cls, config, **kwargs):
+# def create_model(model_cls, config, **kwargs):
+def create_model(model_cls, config, pca_coef, **kwargs):
 
-    return model_cls(mesh_vertexes=config.vertex, dtype=jnp.float32)
+    # return model_cls(mesh_vertexes=config.vertex, dtype=jnp.float32)
 
-    # return model_cls(mesh_vertexes=config.vertex,
-    #                  dtype=jnp.float32,
-    #                  pca_coef=pca_coef)
+    return model_cls(mesh_vertexes=config.vertex,
+                     dtype=jnp.float32,
+                     pca_coef=pca_coef)
 
 
 def create_learning_rate_fn(config: ml_collections.ConfigDict,
@@ -170,18 +172,38 @@ def create_train_state(params_key, dropout_key,
     return state
 
 
-def train_step(state, batch, learning_rate_fn, dropout_key):
+def train_step(state, batch, learning_rate_fn, dropout_key, renderer,
+               kpt_detector):
 
     def loss_fn(params):
         """loss function used for training."""
         # Dropout is enabled with `training=True` (that is, `deterministic=False`).
         pred = state.apply_fn({'params': params},
-                              x=batch['neutral_vtx'],
+                              x=batch['vtx'],
+                              x_mean=batch['vtx_mean'],
                               img=batch['img'],
                               training=True,
                               rngs={'dropout': dropout_train_key})
 
-        loss = mean_square_error_loss(pred, batch['vtx'])
+        pred_images = renderer.render(
+            pred,
+            batch['faces_uvs'],
+            batch['verts_uvs'],
+            batch['verts_idx'],
+            batch['texture_image'],
+            batch['transform_head'],
+            batch['transform_camera'],
+            batch['focal'],
+            batch['princpt'],
+            batch['render_width'],
+            batch['render_height'],
+        )
+
+        real_kpts = kpt_detector.detect(
+            torch.from_dlpack(jdl.to_dlpack(batch['img'])))
+        pred_kpts = kpt_detector.detect(pred_images)
+
+        loss = mean_square_error_loss(pred_kpts, real_kpts)
         # loss = chamfer_distance_loss(pred, batch['vtx'])
         # loss = earth_mover_distance_loss(pred, batch['vtx'])
 
@@ -226,9 +248,10 @@ def train_and_evalutation(config: ml_collections.ConfigDict, workdir: str,
 
     model_cls = getattr(models, config.model)
 
-    model = create_model(model_cls, config)
-    # model = create_model(model_cls, config, get_pca_coef(config.pca))
-
+    # model = create_model(model_cls, config)
+    model = create_model(model_cls, config, get_pca_coef(config.pca))
+    face_render = Renderer('cuda:1')
+    face_kpt_detector = FaceMesh(config['batch_size'], config['kpt_num'])
     base_learning_rate = config.learning_rate
 
     learning_rate_fn = create_learning_rate_fn(config, base_learning_rate,
@@ -244,7 +267,9 @@ def train_and_evalutation(config: ml_collections.ConfigDict, workdir: str,
 
     p_train_step = jax.pmap(partial(train_step,
                                     learning_rate_fn=learning_rate_fn,
-                                    dropout_key=dropout_key),
+                                    dropout_key=dropout_key,
+                                    renderer=face_render,
+                                    kpt_detector=face_kpt_detector),
                             axis_name='batch')
 
     train_metrics = []

@@ -101,7 +101,7 @@ class CNN(nn.Module):
     conv: ModuleDef = nn.Conv
 
     @nn.compact
-    def __call__(self, x, training: bool = True):
+    def __call__(self, x_mean, x, training: bool = True):
         conv = partial(self.conv,
                        use_bias=False,
                        dtype=self.dtype,
@@ -120,7 +120,7 @@ class CNN(nn.Module):
         x = nn.Dense(self.mesh_vertexes,
                      kernel_init=constant(jnp.array(self.pca_coef)))(x)
         x = einops.rearrange(x, 'b (n c) -> b n c', n=7306, c=3)
-
+        x += x_mean
         return x
 
 
