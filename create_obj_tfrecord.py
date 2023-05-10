@@ -11,6 +11,7 @@ from sklearn.decomposition import PCA
 import pickle
 from pytorch3d.io import load_obj
 from PIL import Image
+from tqdm import tqdm
 
 IMAGE_WIDTH_RESIZE = 240  #240
 IMAGE_HEIGHT_RESIZE = 320  #320
@@ -35,35 +36,68 @@ subjects = [
 
 types = [
     'E001_Neutral_Eyes_Open',
-    #'E003_Neutral_Eyes_Closed',
-    # "E006_Jaw_Drop_Brows_Up", "E007_Neck_Stretch_Brows_Up",
-    # "E008_Smile_Mouth_Closed", "E009_Smile_Mouth_Open", "E010_Smile_Stretched",
-    # "E011_Jaw_Open_Sharp_Corner_Lip_Stretch", "E012_Jaw_Open_Huge_Smile",
-    # "E013_Open_Lips_Mouth_Stretch_Nose_Wrinkled",
-    # "E014_Open_Mouth_Stretch_Nose_Wrinkled", "E015_Jaw_Open_Upper_Lip_Raised",
-    # "E016_Raise_Upper_Lip_Scrunch_Nose",
-    # "E017_Jaw_Open_Mouth_Corners_Down_Nose_Wrinkled", "E018_Raise_Cheeks",
-    # "E019_Frown", "E020_Lower_Eyebrows", "E021_Pressed_Lips_Brows_Down",
-    # "E022_Raise_Inner_Eyebrows", "E023_Hide_Lips_Look_Up",
-    # "E024_Kiss_Lips_Look_Down", "E025_Shh", "E026_Oooo",
-    # "E027_Scrunch_Face_Squeeze_Eyes", "E028_Scream_Eyebrows_Up",
-    # "E029_Show_All_Teeth", "E030_Open_Mouth_Wide_Tongue_Up_And_Back",
-    # "E031_Jaw_Open_Lips_Together", "E032_Jaw_Open_Pull_Lips_In",
-    # "E033_Jaw_Clench", "E034_Jaw_Open_Lips_Pushed_Out",
-    # "E035_Lips_Together_Pushed_Forward", "E036_Stick_Lower_Lip_Out",
-    # "E037_Bite_Lower_Lip", "E038_Bite_Upper_Lip", "E039_Lips_Open_Right",
-    # "E040_Lips_Open_Left", "E041_Mouth_Nose_Right", "E042_Mouth_Nose_Left",
-    # "E043_Mouth_Open_Jaw_Right_Show_Teeth",
-    # "E044_Mouth_Open_Jaw_Left_Show_Teeth", "E045_Jaw_Back", "E046_Jaw_Forward",
-    # "E047_Tongue_Over_Upper_Lip", "E048_Tongue_Out_Lips_Closed",
-    # "E049_Mouth_Open_Tongue_Out", "E050_Bite_Tongue", "E051_Tongue_Out_Flat",
-    # "E052_Tongue_Out_Thick", "E053_Tongue_Out_Rolled",
-    # "E054_Tongue_Out_Right_Teeth_Showing",
-    # "E055_Tongue_Out_Left_Teeth_Showing", "E056_Suck_Cheeks_In",
-    # "E057_Cheeks_Puffed", "E058_Right_Cheek_Puffed", "E059_Left_Cheek_Puffed",
-    # "E060_Blow_Cheeks_Full_Of_Air", "E061_Lips_Puffed",
-    # "E062_Nostrils_Dilated", "E063_Nostrils_Sucked_In",
-    # "E064_Raise_Right_Eyebrow", "E065_Raise_Left_Eyebrow", "E074_Blink",
+    'E003_Neutral_Eyes_Closed',
+    "E006_Jaw_Drop_Brows_Up",
+    "E007_Neck_Stretch_Brows_Up",
+    "E008_Smile_Mouth_Closed",
+    "E009_Smile_Mouth_Open",
+    "E010_Smile_Stretched",
+    "E011_Jaw_Open_Sharp_Corner_Lip_Stretch",
+    "E012_Jaw_Open_Huge_Smile",
+    "E013_Open_Lips_Mouth_Stretch_Nose_Wrinkled",
+    "E014_Open_Mouth_Stretch_Nose_Wrinkled",
+    "E015_Jaw_Open_Upper_Lip_Raised",
+    "E016_Raise_Upper_Lip_Scrunch_Nose",
+    "E017_Jaw_Open_Mouth_Corners_Down_Nose_Wrinkled",
+    "E018_Raise_Cheeks",
+    "E019_Frown",
+    "E020_Lower_Eyebrows",
+    "E021_Pressed_Lips_Brows_Down",
+    "E022_Raise_Inner_Eyebrows",
+    "E023_Hide_Lips_Look_Up",
+    "E024_Kiss_Lips_Look_Down",
+    "E025_Shh",
+    "E026_Oooo",
+    "E027_Scrunch_Face_Squeeze_Eyes",
+    "E028_Scream_Eyebrows_Up",
+    "E029_Show_All_Teeth",
+    "E030_Open_Mouth_Wide_Tongue_Up_And_Back",
+    "E031_Jaw_Open_Lips_Together",
+    "E032_Jaw_Open_Pull_Lips_In",
+    "E033_Jaw_Clench",
+    "E034_Jaw_Open_Lips_Pushed_Out",
+    "E035_Lips_Together_Pushed_Forward",
+    "E036_Stick_Lower_Lip_Out",
+    "E037_Bite_Lower_Lip",
+    "E038_Bite_Upper_Lip",
+    "E039_Lips_Open_Right",
+    "E040_Lips_Open_Left",
+    "E041_Mouth_Nose_Right",
+    "E042_Mouth_Nose_Left",
+    "E043_Mouth_Open_Jaw_Right_Show_Teeth",
+    "E044_Mouth_Open_Jaw_Left_Show_Teeth",
+    "E045_Jaw_Back",
+    "E046_Jaw_Forward",
+    "E047_Tongue_Over_Upper_Lip",
+    "E048_Tongue_Out_Lips_Closed",
+    "E049_Mouth_Open_Tongue_Out",
+    "E050_Bite_Tongue",
+    "E051_Tongue_Out_Flat",
+    "E052_Tongue_Out_Thick",
+    "E053_Tongue_Out_Rolled",
+    "E054_Tongue_Out_Right_Teeth_Showing",
+    "E055_Tongue_Out_Left_Teeth_Showing",
+    "E056_Suck_Cheeks_In",
+    "E057_Cheeks_Puffed",
+    "E058_Right_Cheek_Puffed",
+    "E059_Left_Cheek_Puffed",
+    "E060_Blow_Cheeks_Full_Of_Air",
+    "E061_Lips_Puffed",
+    "E062_Nostrils_Dilated",
+    "E063_Nostrils_Sucked_In",
+    "E064_Raise_Right_Eyebrow",
+    "E065_Raise_Left_Eyebrow",
+    "E074_Blink",
     # "SEN_a_good_morrow_to_you_my_boy", "SEN_a_voice_spoke_near-at-hand",
     # "SEN_alfalfa_is_healthy_for_you",
     # "SEN_all_your_wishful_thinking_wont_change_that",
@@ -112,10 +146,7 @@ types = [
 '''
 data with right mp face landmark detection.
 '''
-views = [
-    '400009',
-    #  '400013', '400015', '400037', '400041'
-]
+views = ['400009', '400013', '400015', '400037', '400041']
 # views = [
 #     "400002", "400007", "40009", "400012", "400013", "400015", "400016",
 #     , "400019", "400023", "400029", "400030", "400031", "400037",
@@ -227,7 +258,13 @@ class ImageMesh2TFRecord_Converter():
         """
 
         cnt = 0
-        for typ in types:  # list
+
+        # read mean vertexes from .bin file.
+        with open(Path(f'{self._geom_pth}/vert_mean.bin'), 'rb') as f:
+            data = f.read()
+        mesh_mean = np.frombuffer(data, dtype=np.float32)
+
+        for typ in tqdm(types):  # list
 
             mesh_pth = Path(f'{self._geom_pth}/tracked_mesh/{typ}')
             type_pth = Path(f'{self._images_pth}/{typ}')
@@ -253,7 +290,7 @@ class ImageMesh2TFRecord_Converter():
                 images_pth = [pth for pth in ang_pth.glob('*.png')]
                 tex_pth = [pth for pth in tex_angle_pths[i].glob('*.png')]
 
-                for j, img_pth in enumerate(images_pth):
+                for j, img_pth in tqdm(enumerate(images_pth)):
                     idx = img_pth.stem
 
                     # read vertexes from .bin file.
@@ -266,7 +303,7 @@ class ImageMesh2TFRecord_Converter():
                     verts_uvs = aux.verts_uvs
                     faces_uvs = faces.textures_idx
                     verts_idx = faces.verts_idx
-                
+
                     # read 2D image
                     res_img, img = self._load_image(img_pth)
 
@@ -282,10 +319,9 @@ class ImageMesh2TFRecord_Converter():
                         img = cv2.resize(
                             img, [IMAGE_WIDTH_RESIZE, IMAGE_HEIGHT_RESIZE])
 
-                        # mesh = np.array(mesh).astype(np.float32)
-                        print('--------------------------')
-                        print(f'Obj: {mesh_pth}/{idx}.obj')
-                        print(f'Img: {img_pth}')
+                        # print('--------------------------')
+                        # print(f'Obj: {mesh_pth}/{idx}.obj')
+                        # print(f'Img: {img_pth}')
 
                         example = tf.train.Example(features=tf.train.Features(
                             feature={
@@ -296,6 +332,11 @@ class ImageMesh2TFRecord_Converter():
                                 tf.train.Feature(bytes_list=tf.train.BytesList(
                                     value=[mesh.astype(np.float32).tobytes()
                                            ])),
+                                "vtx_mean":
+                                tf.train.Feature(bytes_list=tf.train.BytesList(
+                                    value=[
+                                        mesh_mean.astype(np.float32).tobytes()
+                                    ])),
                                 "tex":
                                 tf.train.Feature(bytes_list=tf.train.BytesList(
                                     value=[
@@ -338,9 +379,6 @@ class ImageMesh2TFRecord_Converter():
                                     ]))
                             }))
                         cnt += 1
-
-                        # if cnt % 100 == 0:
-                        #     logging.info(f'Finished {cnt} data.')
                         self.writer.write(example.SerializeToString())
 
         print(f'total_number: {cnt}')
