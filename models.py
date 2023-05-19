@@ -61,12 +61,13 @@ class VertexUNet(nn.Module):
                                          code=self.expr_code)
         # print(type(self.decoding_unints))
         # self.decoding_unints[-1] = self.mesh_vertexes * 3
-        dense = partial(self.dense,
-                        use_bias=True,
-                        dtype=self.dtype,)
+        dense = partial(
+            self.dense,
+            use_bias=True,
+            dtype=self.dtype,
+        )
         skips = []
 
-      
         #expression encoder
         expr_encoding = expr_encoder(img, training=training)
 
@@ -117,8 +118,9 @@ class CNN(nn.Module):
         x = nn.Dropout(rate=0.2)(x, deterministic=not training)
 
         x = nn.Dense(160)(x)
-        x = nn.Dense(self.mesh_vertexes*3,
-                     kernel_init=constant(jnp.array(self.pca_coef)))(x)
+        x = nn.Dense(self.mesh_vertexes * 3,
+                     # kernel_init=constant(jnp.array(self.pca_coef)),
+                     )(x)
         x = einops.rearrange(x, 'b (n c) -> b n c', n=7306, c=3)
         return x
 

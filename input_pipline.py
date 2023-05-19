@@ -46,9 +46,9 @@ def readTFRECORD(tfrecord_pth: str,
 def augment_using_ops(batch):
     # images = tf.image.random_flip_left_right(images)
     # images = tf.image.random_flip_up_down(images)
-    batch['img'] = tf.image.random_brightness(batch['img'], 0.2)
-    batch['img'] = tf.keras.layers.RandomZoom(0.2)(batch['img'])
-    batch['img'] = tf.keras.layers.RandomRotation(0.1)(batch['img'])
+    # batch['img'] = tf.image.random_brightness(batch['img'], 0.2)
+    # batch['img'] = tf.keras.layers.RandomZoom(0.2)(batch['img'])
+    # batch['img'] = tf.keras.layers.RandomRotation(0.1)(batch['img'])
     
     # images = tf.image.rot90(images)
     return batch

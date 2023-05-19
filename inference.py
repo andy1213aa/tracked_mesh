@@ -141,10 +141,15 @@ def inference(
 
     state = restore_checkpoint(state, workdir)
 
+    # subject = '6674443'
+    # facial = 'E044_Mouth_Open_Jaw_Left_Show_Teeth'#'E001_Neutral_Eyes_Open'
+    # view = '400002'
+    # idx = '021456'#'000220'
+    
     subject = '6674443'
-    facial = 'E045_Jaw_Back'#'E001_Neutral_Eyes_Open'
+    facial = 'E001_Neutral_Eyes_Open'#'E001_Neutral_Eyes_Open'
     view = '400002'
-    idx = '021885'#'000220'
+    idx = '000220'#'000220'
 
     img = cv2.imread(
         f'/home/aaron/Desktop/multiface/{subject}_GHS/images/{facial}/{view}/{idx}.png'
@@ -180,9 +185,9 @@ def inference(
     pred_cpu = pred_cpu.copy()
     pred_cpu *= SCALE
 
-    res, vertex_true = load_obj(
-        f'/home/aaron/Desktop/multiface/{subject}_GHS/geom/tracked_mesh/{facial}/{idx}.obj'
-    )
+    # res, vertex_true = load_obj(
+    #     f'/home/aaron/Desktop/multiface/{subject}_GHS/geom/tracked_mesh/{facial}/{idx}.obj'
+    # )
 
     with open(
             Path(
