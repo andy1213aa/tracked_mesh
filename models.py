@@ -15,7 +15,7 @@ class ExpressionEncoder(nn.Module):
     num_filters: Sequence[int]
     num_strides: Sequence[int]
     code: int = 128
-    dtype: Any = jnp.float16
+    dtype: Any = jnp.float32
     conv: ModuleDef = nn.Conv
 
     @nn.compact
@@ -50,7 +50,7 @@ class VertexUNet(nn.Module):
     expr_strides: Sequence[int]
     mesh_vertexes: int = 7306
     expr_code: int = 128
-    dtype: Any = jnp.float16
+    dtype: Any = jnp.float32
     dense: ModuleDef = nn.Dense
 
     @nn.compact
@@ -97,11 +97,11 @@ class CNN(nn.Module):
     num_strides: Sequence[int]
     mesh_vertexes: int
     pca_coef: jnp.array
-    dtype: Any = jnp.float16
+    dtype: Any = jnp.float32
     conv: ModuleDef = nn.Conv
 
     @nn.compact
-    def __call__(self, x_mean, x, training: bool = True):
+    def __call__(self, x, training: bool = True):
         conv = partial(self.conv,
                        use_bias=False,
                        dtype=self.dtype,
@@ -117,10 +117,9 @@ class CNN(nn.Module):
         x = nn.Dropout(rate=0.2)(x, deterministic=not training)
 
         x = nn.Dense(160)(x)
-        x = nn.Dense(self.mesh_vertexes,
+        x = nn.Dense(self.mesh_vertexes*3,
                      kernel_init=constant(jnp.array(self.pca_coef)))(x)
         x = einops.rearrange(x, 'b (n c) -> b n c', n=7306, c=3)
-        x += x_mean
         return x
 
 
@@ -130,10 +129,10 @@ Classic_CNN = partial(
     num_strides=[(2, 2), (1, 1), (2, 2), (1, 1), (2, 2), (1, 1), (2, 2),
                  (1, 1), (2, 2), (1, 1), (2, 2), (1, 1)])
 
-Classic_UNet = partial(VertexUNet,
-                       enconding_units=[512, 256, 128],
-                       decoding_unints=[256, 512, 7306 * 3],
-                       expr_filters=[16, 16, 32, 32, 64, 64, 128, 128],
-                       expr_strides=[(1, 1), (2, 2), (1, 1), (2, 2), (1, 1),
-                                     (2, 2), (1, 1), (2, 2)],
-                       expr_code=128)
+# Classic_UNet = partial(VertexUNet,
+#                        enconding_units=[512, 256, 128],
+#                        decoding_unints=[256, 512, 7306 * 3],
+#                        expr_filters=[16, 16, 32, 32, 64, 64, 128, 128],
+#                        expr_strides=[(1, 1), (2, 2), (1, 1), (2, 2), (1, 1),
+#                                      (2, 2), (1, 1), (2, 2)],
+#                        expr_code=128)

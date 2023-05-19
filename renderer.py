@@ -11,8 +11,10 @@ from pytorch3d.structures import Meshes
 
 class Renderer():
 
-    def __init__(self, device: str = 'cuda:0'):
+    def __init__(self, image_size, render_size, device: str = 'cuda:0'):
         self.device = device
+        self.image_size = image_size
+        self.render_size = render_size
 
     def _split_batch_to_list(self, tensor):
         # split the tensor along the first dimension
@@ -38,12 +40,12 @@ class Renderer():
 
     def _jax2torch(self, verts, faces_uvs, verts_uvs, verts_idx, texture_image,
                    transform_head, transform_camera, focal, princpt):
-
+        print(verts)
         return (torch.from_dlpack(jdl.to_dlpack(verts)),
-                torch.from_dlpack(jdl.to_dlpack(faces_uvs)),
+                torch.from_dlpack(jdl.to_dlpack(faces_uvs)).to(dtype=torch.int64),
                 torch.from_dlpack(jdl.to_dlpack(verts_uvs)),
-                torch.from_dlpack(jdl.to_dlpack(verts_idx)),
-                torch.from_dlpack(jdl.to_dlpack(texture_image)),
+                torch.from_dlpack(jdl.to_dlpack(verts_idx)).to(dtype=torch.int64),
+                torch.from_dlpack(jdl.to_dlpack(texture_image)) / 255.0,
                 torch.from_dlpack(jdl.to_dlpack(transform_head)),
                 torch.from_dlpack(jdl.to_dlpack(transform_camera)),
                 torch.from_dlpack(jdl.to_dlpack(focal)),
@@ -59,21 +61,22 @@ class Renderer():
                transform_camera,
                focal,
                princpt,
-               render_width,
-               render_height,
-               preprocess=True):
+               preprocess=False):
 
         if preprocess:
-            (verts, faces_uvs, verts_uvs, verts_idx, texture_image,
-             transform_head, transform_camera, focal, princpt, render_width,
-             render_height) = self._jax2torch(verts, faces_uvs, verts_uvs,
-                                              verts_idx, texture_image,
-                                              transform_head, transform_camera,
-                                              focal, princpt, render_width,
-                                              render_height)
-
-        # verts_uvs = aux.verts_uvs[None, ...]  # (1, V, 2)
-        # faces_uvs = faces.textures_idx[None, ...]  # (1, F, 3)
+            (
+                verts,
+                faces_uvs,
+                verts_uvs,
+                verts_idx,
+                texture_image,
+                transform_head,
+                transform_camera,
+                focal,
+                princpt,
+            ) = self._jax2torch(verts, faces_uvs, verts_uvs, verts_idx,
+                                texture_image, transform_head,
+                                transform_camera, focal, princpt)
 
         tex = Textures(verts_uvs=verts_uvs,
                        faces_uvs=faces_uvs,
@@ -90,11 +93,10 @@ class Renderer():
                                      focal_length=-focal,
                                      principal_point=princpt,
                                      in_ndc=False,
-                                     image_size=((render_height,
-                                                  render_width), ))
+                                     image_size=(self.render_size, ))
 
         raster_settings = RasterizationSettings(
-            image_size=[render_height, render_width],
+            image_size=[self.image_size[0], self.image_size[1]],
             blur_radius=0.0,
             faces_per_pixel=1,
         )

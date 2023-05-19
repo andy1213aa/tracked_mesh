@@ -54,8 +54,8 @@ def get_pca_coef(pca_pth):
     return pca.components_
 
 
-def inititalized(key, image_size, model):
-    input_shape = (1, image_size[0], image_size[1], 3)
+def inititalized(key, render_size, model):
+    input_shape = (1, render_size[0], render_size[1], 1)
 
     @jax.jit
     def init(*args):
@@ -68,7 +68,7 @@ def inititalized(key, image_size, model):
 
 def create_model(model_cls, config, pca_coef, **kwargs):
 
-    return model_cls(mesh_vertexes=config.vertex,
+    return model_cls(mesh_vertexes=config.vertex_num,
                      dtype=jnp.float32,
                      pca_coef=pca_coef)
 
@@ -80,11 +80,11 @@ class TrainState(train_state.TrainState):
 
 
 def create_train_state(params_key, dropout_key,
-                       config: ml_collections.ConfigDict, model, image_size,
+                       config: ml_collections.ConfigDict, model, render_size,
                        learning_rate_fn):
     """Create initital training state."""
 
-    variables = inititalized(params_key, image_size, model)
+    variables = inititalized(params_key, render_size, model)
     tx = optax.adam(learning_rate=learning_rate_fn)
     state = TrainState.create(
         apply_fn=model.apply,
@@ -137,36 +137,65 @@ def inference(
                                                steps_per_epoch)
 
     state = create_train_state(params_key, dropout_key, config, model,
-                               config.image_size, learning_rate_fn)
+                               config.render_size, learning_rate_fn)
 
     state = restore_checkpoint(state, workdir)
 
-    subject = '7889059'
-    facial = 'E001_Neutral_Eyes_Open'
+    subject = '6674443'
+    facial = 'E045_Jaw_Back'#'E001_Neutral_Eyes_Open'
     view = '400002'
-    idx = '000123'
+    idx = '021885'#'000220'
 
     img = cv2.imread(
         f'/home/aaron/Desktop/multiface/{subject}_GHS/images/{facial}/{view}/{idx}.png'
     )
 
-    img = cv2.resize(img, config.image_size)
+    img = cv2.resize(img, config.render_size)
+    img = cv2.cvtColor(img,
+                       cv2.COLOR_BGR2GRAY).reshape(config.render_size + (1, ))
     img = img.reshape((-1, ) + img.shape)
     img = jnp.asarray(img).astype(jnp.float16)
+    image_mean = 47.727367
+    image_std = 27.568207
+
+    img = (img - image_mean) / image_std
+
     dropout_train_key = jax.random.fold_in(key=dropout_key, data=state.step)
+
     pred = state.apply_fn({'params': state.params},
                           img,
                           training=False,
                           rngs={'dropout': dropout_train_key})
+
+    mean_mesh_pth = '/home/aaron/Desktop/multiface/6674443_GHS/geom/vert_mean.bin'
+    with open(mean_mesh_pth, 'rb') as f:
+        data = f.read()
+        mesh_mean = np.frombuffer(data, dtype=np.float32).reshape((7306, 3))
+        center = mesh_mean.mean(0)
+
+    SCALE = np.max(np.abs(mesh_mean - center))
+
     pred_cpu = jax.device_get(pred)
     pred_cpu = einops.rearrange(pred_cpu, 'b v c -> (b v) c', c=3)  #b = 1
+    pred_cpu = pred_cpu.copy()
+    pred_cpu *= SCALE
 
     res, vertex_true = load_obj(
         f'/home/aaron/Desktop/multiface/{subject}_GHS/geom/tracked_mesh/{facial}/{idx}.obj'
     )
-    vertex_true = np.array(vertex_true)
 
-    print((np.mean(vertex_true - pred_cpu)**2))
+    with open(
+            Path(
+                f'/home/aaron/Desktop/multiface/{subject}_GHS/geom/tracked_mesh/{facial}/{idx}.bin'
+            ),
+            'rb',
+    ) as f:
+        data = f.read()
+    vertex_true = np.frombuffer(data, dtype=np.float32).reshape((-1, 3))
+
+    # vertex_true = np.array(vertex_true)
+
+    print((np.mean((vertex_true - pred_cpu)**2)))
 
     obj_v_result = [f'v {x} {y} {z}\n' for x, y, z in pred_cpu]
     obj_v_result = np.array(obj_v_result)

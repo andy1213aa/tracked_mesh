@@ -29,6 +29,7 @@ from renderer import Renderer
 from face_landmark import FaceMesh
 import jax.dlpack as jdl
 import torch
+from tensorboard.plugins.mesh import summary as mesh_summary
 
 
 def get_pca_coef(pca_pth):
@@ -55,23 +56,27 @@ def prepare_tf_data(xs):
 
 
 def inititalized(key, image_size, vertex_size, model):
-    img_shape = (1, image_size[0], image_size[1], 3)
-    vertex_shape = (1, vertex_size//3, 3)
+    img_shape = (1, image_size[0], image_size[1], 1)
+    vertex_shape = (1, vertex_size, 3)
 
     @jax.jit
     def init(*args):
         # Dropout is disabled with `training=False` (that is, `deterministic=True`).
         return model.init(*args, training=False)
 
-    variables = init({'params': key}, jnp.ones(vertex_shape, model.dtype),
-                     jnp.ones(img_shape, model.dtype))
+    # variables = init({'params': key}, jnp.ones(vertex_shape, model.dtype),
+    #                  jnp.ones(img_shape, model.dtype))
+    variables = init(
+        {'params': key},
+        jnp.ones(img_shape, model.dtype),
+    )
     logging.info(parameter_overview.get_parameter_overview(variables))
     return variables
 
 
-def mean_square_error_loss(pred, gt):
+# def mean_square_error_loss(pred, gt):
 
-    return jnp.mean(jnp.square(jnp.subtract(pred, gt)))
+#     return jnp.mean(jnp.square(jnp.subtract(pred, gt)))
 
 
 def chamfer_distance_loss(pred_points, gt_points):
@@ -104,11 +109,11 @@ def create_input_iter(ds):
 
 
 def compute_metrics(y_pred, y_true):
-    mse = mean_square_error_loss(y_pred, y_true)
-    # chamfer = chamfer_distance_loss(y_pred, y_true)
+    # mse = mean_square_error_loss(y_pred, y_true)
+    chamfer = chamfer_distance_loss(y_pred, y_true)
     # loss = earth_mover_distance_loss(y_pred, y_true)
 
-    metrics = {'mse': mse}
+    metrics = {'chamfer': chamfer}
     metrics = lax.pmean(metrics, axis_name='batch')
     return metrics
 
@@ -122,9 +127,9 @@ class TrainState(train_state.TrainState):
 # def create_model(model_cls, config, **kwargs):
 def create_model(model_cls, config, pca_coef, **kwargs):
 
-    # return model_cls(mesh_vertexes=config.vertex, dtype=jnp.float32)
+    # return model_cls(mesh_vertexes=config.vertex_num, dtype=jnp.float32)
 
-    return model_cls(mesh_vertexes=config.vertex,
+    return model_cls(mesh_vertexes=config.vertex_num,
                      dtype=jnp.float32,
                      pca_coef=pca_coef)
 
@@ -132,18 +137,20 @@ def create_model(model_cls, config, pca_coef, **kwargs):
 def create_learning_rate_fn(config: ml_collections.ConfigDict,
                             base_learning_rate: float, steps_per_epoch: int):
 
-    warmup_fn = optax.linear_schedule(init_value=0.,
-                                      end_value=base_learning_rate,
-                                      transition_steps=config.warmup_epochs *
-                                      steps_per_epoch)
+    warmup_fn = optax.linear_schedule(
+        init_value=0.,
+        end_value=base_learning_rate,
+        transition_steps=config.warmup_epochs * steps_per_epoch,
+    )
     #inverse square root decay
     # ISR_fn = optax.constant_schedule(
 
     # )
     cosine_epochs = max(config.num_epochs - config.warmup_epochs, 1)
-    consine_fn = optax.cosine_decay_schedule(init_value=base_learning_rate,
-                                             decay_steps=cosine_epochs *
-                                             steps_per_epoch)
+    consine_fn = optax.cosine_decay_schedule(
+        init_value=base_learning_rate,
+        decay_steps=cosine_epochs * steps_per_epoch,
+    )
 
     # optax.exponential_decay(init_value=consine_fn,decay_rate=)
     schedule_fn = optax.join_schedules(
@@ -155,11 +162,16 @@ def create_learning_rate_fn(config: ml_collections.ConfigDict,
 
 
 def create_train_state(params_key, dropout_key,
-                       config: ml_collections.ConfigDict, model, image_size,
+                       config: ml_collections.ConfigDict, model,
                        learning_rate_fn):
     """Create initital training state."""
 
-    variables = inititalized(params_key, image_size, config.vertex, model)
+    variables = inititalized(
+        params_key,
+        config.render_size,
+        config.vertex_num,
+        model,
+    )
     tx = optax.adam(learning_rate=learning_rate_fn, b1=0.9, b2=0.999)
     # tx = optax.tx = optax.rmsprop(learning_rate=learning_rate_fn, eps=1e-4)
     state = TrainState.create(
@@ -172,42 +184,51 @@ def create_train_state(params_key, dropout_key,
     return state
 
 
-def train_step(state, batch, learning_rate_fn, dropout_key, renderer,
-               kpt_detector):
+def train_step(
+    state,
+    batch,
+    learning_rate_fn,
+    dropout_key,
+):
 
     def loss_fn(params):
         """loss function used for training."""
         # Dropout is enabled with `training=True` (that is, `deterministic=False`).
-        pred = state.apply_fn({'params': params},
-                              x=batch['vtx'],
-                              x_mean=batch['vtx_mean'],
-                              img=batch['img'],
-                              training=True,
-                              rngs={'dropout': dropout_train_key})
-
-        pred_images = renderer.render(
-            pred,
-            batch['faces_uvs'],
-            batch['verts_uvs'],
-            batch['verts_idx'],
-            batch['texture_image'],
-            batch['transform_head'],
-            batch['transform_camera'],
-            batch['focal'],
-            batch['princpt'],
-            batch['render_width'],
-            batch['render_height'],
+        pred_vtx = state.apply_fn(
+            {'params': params},
+            x=batch['img'],
+            training=True,
+            rngs={'dropout': dropout_train_key},
         )
+        # focal = jnp.concatenate([
+        #     batch['in_cam'][:, 0, 0].reshape(
+        #         (-1, 1)), batch['in_cam'][:, 1, 1].reshape(-1, 1)
+        # ],
+        #                         axis=1)
+        # princpt = jnp.concatenate([
+        #     batch['in_cam'][:, 0, 2].reshape(
+        #         (-1, 1)), batch['in_cam'][:, 1, 2].reshape(-1, 1)
+        # ],
+        #                           axis=1)
+        # pred_images = renderer.render(pred_vtx,
+        #                               batch['faces_uvs'],
+        #                               batch['verts_uvs'],
+        #                               batch['verts_idx'],
+        #                               batch['texture_image'],
+        #                               batch['head_pose'],
+        #                               batch['ex_cam'],
+        #                               focal,
+        #                               princpt,
+        #                               preprocess=True)
 
-        real_kpts = kpt_detector.detect(
-            torch.from_dlpack(jdl.to_dlpack(batch['img'])))
-        pred_kpts = kpt_detector.detect(pred_images)
+        # real_kpts = kpt_detector.detect(
+        #     torch.from_dlpack(jdl.to_dlpack(batch['img'])))
+        # # pred_kpts = kpt_detector.detect(pred_images)
 
-        loss = mean_square_error_loss(pred_kpts, real_kpts)
-        # loss = chamfer_distance_loss(pred, batch['vtx'])
-        # loss = earth_mover_distance_loss(pred, batch['vtx'])
+        # loss = mean_square_error_loss(pred_kpts, real_kpts)
+        loss = chamfer_distance_loss(pred_vtx, batch['vtx'])
 
-        return loss, pred
+        return loss, pred_vtx
 
     step = state.step
     dropout_train_key = jax.random.fold_in(key=dropout_key, data=step)
@@ -246,31 +267,53 @@ def train_and_evalutation(config: ml_collections.ConfigDict, workdir: str,
     else:
         num_steps = config.num_train_steps
 
-    model_cls = getattr(models, config.model)
+    model_cls = getattr(
+        models,
+        config.model,
+    )
 
     # model = create_model(model_cls, config)
     model = create_model(model_cls, config, get_pca_coef(config.pca))
-    face_render = Renderer('cuda:1')
-    face_kpt_detector = FaceMesh(config['batch_size'], config['kpt_num'])
+    # face_render = Renderer(
+    #     image_size=config.image_size,
+    #     render_size=config.render_size,
+    #     device='cuda:1',
+    # )
+
+    # face_kpt_detector = FaceMesh(
+    #     config['batch_size'],
+    #     config['kpt_num'],
+    # )
+
     base_learning_rate = config.learning_rate
 
-    learning_rate_fn = create_learning_rate_fn(config, base_learning_rate,
-                                               steps_per_epoch)
+    learning_rate_fn = create_learning_rate_fn(
+        config,
+        base_learning_rate,
+        steps_per_epoch,
+    )
 
-    state = create_train_state(params_key, dropout_key, config, model,
-                               config.image_size, learning_rate_fn)
+    state = create_train_state(
+        params_key,
+        dropout_key,
+        config,
+        model,
+        learning_rate_fn,
+    )
 
     state = restore_checkpoint(state, workdir)
     # step_offset > 0 if restarting from checkpoint
     step_offset = int(state.step)
     state = jax_utils.replicate(state)
 
-    p_train_step = jax.pmap(partial(train_step,
-                                    learning_rate_fn=learning_rate_fn,
-                                    dropout_key=dropout_key,
-                                    renderer=face_render,
-                                    kpt_detector=face_kpt_detector),
-                            axis_name='batch')
+    p_train_step = jax.pmap(
+        partial(
+            train_step,
+            learning_rate_fn=learning_rate_fn,
+            dropout_key=dropout_key,
+        ),
+        axis_name='batch',
+    )
 
     train_metrics = []
     hooks = []
@@ -283,8 +326,14 @@ def train_and_evalutation(config: ml_collections.ConfigDict, workdir: str,
 
     logging.info('Initial compilation, this might take some minutes...')
 
+    # 開始計時
+    start_time = time.time()
+    # 初始化計數器
+    step_count = 0
+
     for step, batch in zip(range(step_offset, num_steps), train_iter):
 
+        
         state, metrics = p_train_step(state, batch)
 
         for h in hooks:
@@ -312,6 +361,5 @@ def train_and_evalutation(config: ml_collections.ConfigDict, workdir: str,
         if (step + 1) % steps_per_checkpoint == 0 or step + 1 == num_steps:
             logging.info('model save')
             save_checkpoint(state, workdir)
-    jax.random.normal(jax.random.PRNGKey(0), ()).block_until_ready()
 
     return state

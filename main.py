@@ -23,9 +23,7 @@ def main(argv):
         raise app.UsageError('Too many command-line arguments.')
     # Hide any GPUs from TensorFlow. Otherwise TF might reserve memory and make
     # it unavailable to JAX.
-    tf.config.set_visible_devices([], 'GPU')
-    
-    
+
     os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] = 'false'
     
     logging.info('JAX process: %d / %d', jax.process_index(), jax.process_count())
@@ -35,5 +33,6 @@ def main(argv):
 
 
 if __name__ == '__main__':
+    tf.config.set_visible_devices([], 'GPU')
     flags.mark_flags_as_required(['config', 'workdir', 'datadir'])
     app.run(main)

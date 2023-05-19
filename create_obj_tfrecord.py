@@ -13,25 +13,29 @@ from pytorch3d.io import load_obj
 from PIL import Image
 from tqdm import tqdm
 
-IMAGE_WIDTH_RESIZE = 240  #240
-IMAGE_HEIGHT_RESIZE = 320  #320
+IMAGE_WIDTH_RESIZE = 334  #240
+IMAGE_HEIGHT_RESIZE = 512  #320
 PCA_NUM = 160
 VERTEX_NUM = 7306
 
 FLAGS = flags.FLAGS
-flags.DEFINE_string('record_pth',
-                    default=None,
-                    help='The directory where TFRecord file save.')
+flags.DEFINE_string(
+    'record_pth',
+    default=None,
+    help='The directory where TFRecord file save.',
+)
 
-flags.DEFINE_string('data_pth',
-                    default=None,
-                    help='The directory of data root.')
+flags.DEFINE_string(
+    'data_pth',
+    default=None,
+    help='The directory of data root.',
+)
 
 subjects = [
     '6674443_GHS'
     # '2183941_GHS', '002539136_GHS', '002643814_GHS', '002757580_GHS',
     # '002914589_GHS', '5372021_GHS', '6674443_GHS', '6795937_GHS',
-    # '7889059_GHS', '8870559_GHS'
+    # '7889059_GHS', '8870559_GHS',
 ]
 
 types = [
@@ -44,7 +48,7 @@ types = [
     "E010_Smile_Stretched",
     "E011_Jaw_Open_Sharp_Corner_Lip_Stretch",
     "E012_Jaw_Open_Huge_Smile",
-    "E013_Open_Lips_Mouth_Stretch_Nose_Wrinkled",
+    "E013_Open_Lips_Mouth_Stretch_Nose_Wrinkled",  # don't use with mediapipe
     "E014_Open_Mouth_Stretch_Nose_Wrinkled",
     "E015_Jaw_Open_Upper_Lip_Raised",
     "E016_Raise_Upper_Lip_Scrunch_Nose",
@@ -98,7 +102,8 @@ types = [
     "E064_Raise_Right_Eyebrow",
     "E065_Raise_Left_Eyebrow",
     "E074_Blink",
-    # "SEN_a_good_morrow_to_you_my_boy", "SEN_a_voice_spoke_near-at-hand",
+    # "SEN_a_good_morrow_to_you_my_boy",
+    # "SEN_a_voice_spoke_near-at-hand",
     # "SEN_alfalfa_is_healthy_for_you",
     # "SEN_all_your_wishful_thinking_wont_change_that",
     # "SEN_allow_each_child_to_have_an_ice_pop",
@@ -116,7 +121,8 @@ types = [
     # "SEN_george_is_paranoid_about_a_future_gas_shortage",
     # "SEN_go_change_your_shoes_before_you_turn_around",
     # "SEN_greg_buys_fresh_milk_each_weekday_morning",
-    # "SEN_have_you_got_our_keys_handy", "SEN_how_do_oysters_make_pearls",
+    # "SEN_have_you_got_our_keys_handy",
+    # "SEN_how_do_oysters_make_pearls",
     # "SEN_how_long_would_it_be_occupied",
     # "SEN_how_ya_gonna_keep_em_down_on_the_farm",
     # "SEN_however_a_boys_lively_eyes_might_rove",
@@ -124,8 +130,10 @@ types = [
     # "SEN_if_dark_came_they_would_lose_her",
     # "SEN_im_going_to_search_this_house",
     # "SEN_its_healthier_to_cook_without_sugar",
-    # "SEN_jeffs_toy_go_cart_never_worked", "SEN_more_he_could_take_at_leisure",
-    # "SEN_nobody_else_showed_pleasure", "SEN_oh_we_managed_she_said",
+    # "SEN_jeffs_toy_go_cart_never_worked",
+    # "SEN_more_he_could_take_at_leisure",
+    # "SEN_nobody_else_showed_pleasure",
+    # "SEN_oh_we_managed_she_said",
     # "SEN_she_always_jokes_about_too_much_garlic_in_his_food",
     # "SEN_take_charge_of_choosing_her_bridesmaids_gowns",
     # "SEN_thank_you_she_said_dusting_herself_off",
@@ -133,25 +141,34 @@ types = [
     # "SEN_then_he_thought_me_more_perverse_than_ever",
     # "SEN_they_all_like_long_hot_showers",
     # "SEN_they_are_both_trend_following_methods",
-    # "SEN_they_enjoy_it_when_I_audition", "SEN_they_had_slapped_their_thighs",
+    # "SEN_they_enjoy_it_when_I_audition",
+    # "SEN_they_had_slapped_their_thighs",
     # "SEN_they_werent_as_well_paid_as_they_should_have_been",
-    # "SEN_theyre_going_to_louse_me_up_good", "SEN_theyve_never_met_you_know",
+    # "SEN_theyre_going_to_louse_me_up_good",
+    # # "SEN_theyve_never_met_you_know", # don't use
     # "SEN_when_she_awoke_she_was_the_ship",
     # "SEN_why_buy_oil_when_you_always_use_mine",
     # "SEN_why_charge_money_for_such_garbage",
     # "SEN_why_put_such_a_high_value_on_being_top_dog",
     # "SEN_with_each_song_he_gave_verbal_footnotes",
-    # "SEN_youre_boiling_milk_aint_you"
+    # "SEN_youre_boiling_milk_aint_you",
 ]
 '''
 data with right mp face landmark detection.
 '''
-views = ['400009', '400013', '400015', '400037', '400041']
+views = [
+    '400002'
+    # '400009',
+    # '400013',
+    # '400015',
+    # '400037',
+    # '400041',
+]
 # views = [
 #     "400002", "400007", "40009", "400012", "400013", "400015", "400016",
 #     , "400019", "400023", "400029", "400030", "400031", "400037",
 #     "400039", "400041", "400048", "400049", "400051", "400060", "400061",
-#     "400063", "400064", "400069"
+#     "400063", "400064", "400069",
 # ]
 
 
@@ -173,6 +190,24 @@ class ImageMesh2TFRecord_Converter():
         self._camera_info = Path(f'{data_pth}/KRT')
         self._load_KRT()
 
+    # The following functions can be used to convert a value to a type compatible
+    # with tf.train.Example.
+
+    def _bytes_feature(self, value):
+        """Returns a bytes_list from a string / byte."""
+        if isinstance(value, type(tf.constant(0))):
+            # BytesList won't unpack a string from an EagerTensor.
+            value = value.numpy()
+        return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
+
+    def _float_feature(self, value):
+        """Returns a float_list from a float / double."""
+        return tf.train.Feature(float_list=tf.train.FloatList(value=[value]))
+
+    def _int64_feature(self, value):
+        """Returns an int64_list from a bool / enum / int / uint."""
+        return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
+
     def _load_head_transform(self, pth):
 
         with open(pth, 'r') as f:
@@ -181,7 +216,7 @@ class ImageMesh2TFRecord_Converter():
 
         for i, _ in enumerate(lines):
             head_transform.append([float(x) for x in lines[i].strip().split()])
-        return np.array(head_transform).reshape((3, 4))
+        return np.array(head_transform, dtype=np.float32).reshape((3, 4))
 
     def _load_KRT(self):
         # 定義相機參數列表
@@ -226,6 +261,41 @@ class ImageMesh2TFRecord_Converter():
             return True, img
         return False, ''
 
+    def serialize_example(
+        self,
+        # expression,
+        # camID,
+        img,
+        vtx,
+        # texture,
+        # verts_uvs,
+        # faces_uvs,
+        # verts_idx,
+        # head_pose,
+    ):
+        """
+        Creates a tf.train.Example message ready to be written to a file.
+        """
+        # Create a dictionary mapping the feature name to the tf.train.Example-compatible
+        # data type.
+        feature = {
+            # 'expression': self._bytes_feature(expression),
+            # 'camID': self._int64_feature(camID),
+            'img': self._bytes_feature(img),
+            'vtx': self._bytes_feature(vtx),
+            # 'texture': self._bytes_feature(texture),
+            # 'verts_uvs': self._bytes_feature(verts_uvs),
+            # 'faces_uvs': self._bytes_feature(faces_uvs),
+            # 'verts_idx': self._bytes_feature(verts_idx),
+            # 'head_pose': self._bytes_feature(head_pose),
+        }
+
+        # Create a Features message using tf.train.Example.
+
+        example_proto = tf.train.Example(features=tf.train.Features(
+            feature=feature))
+        return example_proto
+
     def create_tfrecord(self):
         """Create the TFRecord
         
@@ -259,10 +329,10 @@ class ImageMesh2TFRecord_Converter():
 
         cnt = 0
 
-        # read mean vertexes from .bin file.
-        with open(Path(f'{self._geom_pth}/vert_mean.bin'), 'rb') as f:
-            data = f.read()
-        mesh_mean = np.frombuffer(data, dtype=np.float32)
+        # # read mean vertexes from .bin file.
+        # with open(Path(f'{self._geom_pth}/vert_mean.bin'), 'rb') as f:
+        #     data = f.read()
+        # mesh_mean = np.frombuffer(data, dtype=np.float32)
 
         for typ in tqdm(types):  # list
 
@@ -281,14 +351,21 @@ class ImageMesh2TFRecord_Converter():
             ]
 
             for i, ang_pth in enumerate(camera_angle_pths):
-
-                # read intrinsic
-                intricsic_camera = self.camera_params[ang_pth.stem]['K']
-                # read extrinsic
-                extrinsic_camera = self.camera_params[ang_pth.stem]['RT']
+                camID = int(ang_pth.stem)
+                # # read intrinsic
+                # intricsic_camera = self.camera_params[ang_pth.stem]['K']
+                # # read extrinsic
+                # extrinsic_camera = self.camera_params[ang_pth.stem]['RT']
 
                 images_pth = [pth for pth in ang_pth.glob('*.png')]
-                tex_pth = [pth for pth in tex_angle_pths[i].glob('*.png')]
+                tex_pth = [pth
+                           for pth in tex_angle_pths[i].glob('*.png')]
+                
+                images_pth.sort()
+                tex_pth.sort()
+                #只拿前25個 因為後面表情都統一為沒表情 造成資料不平均
+                images_pth = images_pth[:25]
+                tex_pth = tex_pth[:25]
 
                 for j, img_pth in tqdm(enumerate(images_pth)):
                     idx = img_pth.stem
@@ -300,9 +377,10 @@ class ImageMesh2TFRecord_Converter():
 
                     # read uv mapping from obj file.
                     _, faces, aux = load_obj(Path(f'{mesh_pth}/{idx}.obj'))
-                    verts_uvs = aux.verts_uvs
-                    faces_uvs = faces.textures_idx
-                    verts_idx = faces.verts_idx
+
+                    verts_uvs = aux.verts_uvs.numpy().astype(np.float32)
+                    faces_uvs = faces.textures_idx.numpy().astype(np.float32)
+                    verts_idx = faces.verts_idx.numpy().astype(np.float32)
 
                     # read 2D image
                     res_img, img = self._load_image(img_pth)
@@ -310,7 +388,7 @@ class ImageMesh2TFRecord_Converter():
                     # read texture map
 
                     res_tex_img, tex_img = self._load_image(tex_pth[j])
-                    cv2.imwrite('teset.png', tex_img)
+                    # cv2.imwrite('teset.png', tex_img)
                     # read head transform
                     head_pose = self._load_head_transform(
                         Path(f'{mesh_pth}/{idx}_transform.txt'))
@@ -319,67 +397,19 @@ class ImageMesh2TFRecord_Converter():
                         img = cv2.resize(
                             img, [IMAGE_WIDTH_RESIZE, IMAGE_HEIGHT_RESIZE])
 
-                        # print('--------------------------')
-                        # print(f'Obj: {mesh_pth}/{idx}.obj')
-                        # print(f'Img: {img_pth}')
-
-                        example = tf.train.Example(features=tf.train.Features(
-                            feature={
-                                "img":
-                                tf.train.Feature(bytes_list=tf.train.BytesList(
-                                    value=[img.astype(np.float32).tobytes()])),
-                                "vtx":
-                                tf.train.Feature(bytes_list=tf.train.BytesList(
-                                    value=[mesh.astype(np.float32).tobytes()
-                                           ])),
-                                "vtx_mean":
-                                tf.train.Feature(bytes_list=tf.train.BytesList(
-                                    value=[
-                                        mesh_mean.astype(np.float32).tobytes()
-                                    ])),
-                                "tex":
-                                tf.train.Feature(bytes_list=tf.train.BytesList(
-                                    value=[
-                                        tex_img.astype(np.float32).tobytes()
-                                    ])),
-                                "verts_uvs":
-                                tf.train.Feature(bytes_list=tf.train.BytesList(
-                                    value=[
-                                        verts_uvs.numpy().astype(
-                                            np.float32).tobytes()
-                                    ])),
-                                "faces_uvs":
-                                tf.train.Feature(bytes_list=tf.train.BytesList(
-                                    value=[
-                                        faces_uvs.numpy().astype(
-                                            np.float32).tobytes()
-                                    ])),
-                                "verts_idx":
-                                tf.train.Feature(bytes_list=tf.train.BytesList(
-                                    value=[
-                                        verts_idx.numpy().astype(
-                                            np.float32).tobytes()
-                                    ])),
-                                "head_pose":
-                                tf.train.Feature(bytes_list=tf.train.BytesList(
-                                    value=[
-                                        head_pose.astype(np.float32).tobytes()
-                                    ])),
-                                "intricsic_camera":
-                                tf.train.Feature(bytes_list=tf.train.BytesList(
-                                    value=[
-                                        intricsic_camera.astype(
-                                            np.float32).tobytes()
-                                    ])),
-                                "extrinsic_camera":
-                                tf.train.Feature(bytes_list=tf.train.BytesList(
-                                    value=[
-                                        extrinsic_camera.astype(
-                                            np.float32).tobytes()
-                                    ]))
-                            }))
+                        tf_example = self.serialize_example(
+                            # typ.encode('utf-8'),
+                            # camID,
+                            img.tobytes(),
+                            mesh.tobytes(),
+                            # tex_img.tobytes(),
+                            # verts_uvs.tobytes(),
+                            # faces_uvs.tobytes(),
+                            # verts_idx.tobytes(),
+                            # head_pose.tobytes(),
+                        )
                         cnt += 1
-                        self.writer.write(example.SerializeToString())
+                        self.writer.write(tf_example.SerializeToString())
 
         print(f'total_number: {cnt}')
 
@@ -392,9 +422,11 @@ def main(argv):
     writer = tf.io.TFRecordWriter(str(FLAGS.record_pth))
 
     for sub in subjects:
-        conveter = ImageMesh2TFRecord_Converter(FLAGS.record_pth,
-                                                FLAGS.data_pth + f'/{sub}',
-                                                writer)
+        conveter = ImageMesh2TFRecord_Converter(
+            FLAGS.record_pth,
+            FLAGS.data_pth + f'/{sub}',
+            writer,
+        )
 
         conveter.create_tfrecord()
 
