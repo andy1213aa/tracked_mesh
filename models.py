@@ -97,7 +97,9 @@ class CNN(nn.Module):
     num_filters: Sequence[int]
     num_strides: Sequence[int]
     mesh_vertexes: int
-    pca_coef: jnp.array
+    # pca_coef: jnp.array
+    pca_basis: jnp.array
+    mean_mesh : jnp.array
     dtype: Any = jnp.float32
     conv: ModuleDef = nn.Conv
 
@@ -111,25 +113,34 @@ class CNN(nn.Module):
         for i, filters in enumerate(self.num_filters):
             x = conv(filters, (3, 3), self.num_strides[i], name=f'conv{i}')(x)
             x = nn.relu(x)
-
-        x = einops.rearrange(x, 'b h w c -> b (h w c)')
-        # Set the dropout layer with a `rate` of 20%.
+            if i % 2 == 0:
+                x = nn.max_pool(x, window_shape=(2, 2), strides=(2, 2))
+        # x = einops.rearrange(x, 'b h w c -> b (h w c)')
+        # Set the dropout layer with a `rate` of 80%.
         # When the `deterministic` flag is `True`, dropout is turned off.
+      
         x = nn.Dropout(rate=0.2)(x, deterministic=not training)
-
-        x = nn.Dense(160)(x)
-        x = nn.Dense(self.mesh_vertexes * 3,
+       
+        x = nn.Dense(52)(x)
+       
+        x = einops.rearrange(x, 'b h w c -> b (h w c)')
+        # x = einops.rearrange(x, 'b h w c -> b (h w c)')
+        x = nn.Dense(52,
                      # kernel_init=constant(jnp.array(self.pca_coef)),
                      )(x)
-        x = einops.rearrange(x, 'b (n c) -> b n c', n=7306, c=3)
+        # self.pca_coef = x
+        x = jnp.matmul(x, self.pca_basis)
+        x = jnp.add(self.mean_mesh, x)
+        # x = einops.rearrange(x, 'b (n c) -> b n c', n=7306, c=3)
+    
         return x
 
 
 Classic_CNN = partial(
     CNN,
     num_filters=[64, 64, 96, 96, 144, 144, 216, 216, 324, 324, 486, 486],
-    num_strides=[(2, 2), (1, 1), (2, 2), (1, 1), (2, 2), (1, 1), (2, 2),
-                 (1, 1), (2, 2), (1, 1), (2, 2), (1, 1)])
+    num_strides=[(1, 1), (1, 1), (1, 1), (1, 1), (1, 1), (1, 1), (1, 1),
+                 (1, 1), (1, 1), (1, 1), (1, 1), (1, 1)])
 
 # Classic_UNet = partial(VertexUNet,
 #                        enconding_units=[512, 256, 128],

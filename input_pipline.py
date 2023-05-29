@@ -4,17 +4,16 @@ import ml_collections
 from absl import logging
 from pathlib import Path
 
-image_mean = 47.727367
-image_std = 27.568207
+image_mean = 52.233776
+image_std = 30.329227
+# mean_mesh_pth = '/home/aaron/Desktop/multiface/6674443_GHS/geom/vert_mean.bin'
+# with open(mean_mesh_pth, 'rb') as f:
+#     data = f.read()
+#     mesh_mean = np.frombuffer(data, dtype=np.float32).reshape((7306, 3))
+#     center = mesh_mean.mean(0)
 
-mean_mesh_pth = '/home/aaron/Desktop/multiface/6674443_GHS/geom/vert_mean.bin'
-with open(mean_mesh_pth, 'rb') as f:
-    data = f.read()
-    mesh_mean = np.frombuffer(data, dtype=np.float32).reshape((7306, 3))
-    center = mesh_mean.mean(0)
-
-SCALE = np.max(np.abs(mesh_mean - center))
-
+# SCALE = np.max(np.abs(mesh_mean - center))
+SCALE=192.89923
 
 def readTFRECORD(tfrecord_pth: str,
                  config: ml_collections.ConfigDict) -> tf.data:
@@ -35,7 +34,7 @@ def readTFRECORD(tfrecord_pth: str,
             .repeat()
             .batch(config.batch_size, drop_remainder=True)
             # .cache()
-            .map(augment_using_ops,  num_parallel_calls=AUTOTUNE)
+            # .map(augment_using_ops,  num_parallel_calls=AUTOTUNE)
             .prefetch(buffer_size=AUTOTUNE)
         )
 
@@ -44,8 +43,7 @@ def readTFRECORD(tfrecord_pth: str,
 
 
 def augment_using_ops(batch):
-    # images = tf.image.random_flip_left_right(images)
-    # images = tf.image.random_flip_up_down(images)
+
     # batch['img'] = tf.image.random_brightness(batch['img'], 0.2)
     # batch['img'] = tf.keras.layers.RandomZoom(0.2)(batch['img'])
     # batch['img'] = tf.keras.layers.RandomRotation(0.1)(batch['img'])
@@ -81,9 +79,9 @@ def parse(example_proto):
     # intricsic_camera = features['intricsic_camera']
     # extrinsic_camera = features['extrinsic_camera']
 
-    img = tf.io.decode_raw(img, np.uint8)
+    img = tf.io.decode_raw(img, tf.uint8)
     img = tf.cast(img, tf.float32)
-    vtx = tf.io.decode_raw(vtx, np.float32)
+    vtx = tf.io.decode_raw(vtx, tf.float32)
     # vtx_mean = tf.io.decode_raw(vtx_mean, np.float32)
     # tex = tf.io.decode_raw(tex, np.float32)
     # verts_uvs = tf.io.decode_raw(verts_uvs, np.float32)
@@ -95,8 +93,9 @@ def parse(example_proto):
 
     img = tf.reshape(img, [IMAGE_HEIGHT, IMAGE_WIDTH, 3])
     img = tf.image.rgb_to_grayscale(img)
-    img = (img - image_mean) / image_std
-    vtx = tf.reshape(vtx, [NUM_VERTEX, 3])
+    # img = (img - image_mean) / image_std
+    img /= 255.
+    vtx = tf.reshape(vtx, [NUM_VERTEX*3])
     vtx /= SCALE
     # tex = tf.reshape(tex, [1024, 1024, 3])
     # vtx_mean = tf.reshape(vtx_mean, [NUM_VERTEX, 3])

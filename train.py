@@ -24,19 +24,22 @@ import time
 from typing import Any
 import optax
 import models
-from scipy.optimize import linear_sum_assignment
-from renderer import Renderer
-from face_landmark import FaceMesh
-import jax.dlpack as jdl
-import torch
-from tensorboard.plugins.mesh import summary as mesh_summary
+import pickle
 
+SCALE=192.89923
 
-def get_pca_coef(pca_pth):
-    import pickle
+def get_pca_basis(pca_pth):
+
     with open(pca_pth, 'rb') as f:
-        pca = pickle.load(f)
-    return pca.components_
+        pca_basis = pickle.load(f)
+    return pca_basis
+
+
+def get_mean_mesh(mean_mesh_pth):
+
+    with open(mean_mesh_pth, 'rb') as f:
+        mean_mesh = pickle.load(f)
+    return mean_mesh
 
 
 def prepare_tf_data(xs):
@@ -74,19 +77,19 @@ def inititalized(key, image_size, vertex_size, model):
     return variables
 
 
-# def mean_square_error_loss(pred, gt):
+def mean_square_error_loss(pred, gt):
 
-#     return jnp.mean(jnp.square(jnp.subtract(pred, gt)))
+    return jnp.mean(jnp.square(jnp.subtract(pred, gt)))
 
 
-def chamfer_distance_loss(pred_points, gt_points):
-    diff = jnp.expand_dims(pred_points, axis=1) - jnp.expand_dims(gt_points,
-                                                                  axis=0)
-    distance = jnp.sum(jnp.square(jnp.linalg.norm(diff, axis=-1)), axis=-1)
-    pred_to_gt = jnp.min(distance, axis=1)
-    gt_to_pred = jnp.min(distance, axis=0)
-    loss = jnp.mean(pred_to_gt) + jnp.mean(gt_to_pred)
-    return loss
+# def chamfer_distance_loss(pred_points, gt_points):
+#     diff = jnp.expand_dims(pred_points, axis=1) - jnp.expand_dims(gt_points,
+#                                                                   axis=0)
+#     distance = jnp.sum(jnp.square(jnp.linalg.norm(diff, axis=-1)), axis=-1)
+#     pred_to_gt = jnp.min(distance, axis=1)
+#     gt_to_pred = jnp.min(distance, axis=0)
+#     loss = jnp.mean(pred_to_gt) + jnp.mean(gt_to_pred)
+#     return loss
 
 
 def restore_checkpoint(state, workdir):
@@ -109,12 +112,13 @@ def create_input_iter(ds):
 
 
 def compute_metrics(y_pred, y_true):
-    # mse = mean_square_error_loss(y_pred, y_true)
-    chamfer = chamfer_distance_loss(y_pred, y_true)
+    mse = mean_square_error_loss(y_pred, y_true)
+    # chamfer = chamfer_distance_loss(y_pred, y_true)
     # loss = earth_mover_distance_loss(y_pred, y_true)
-
-    metrics = {'chamfer': chamfer}
+    metrics = {'MSE': mse}
+    
     metrics = lax.pmean(metrics, axis_name='batch')
+   
     return metrics
 
 
@@ -125,13 +129,16 @@ class TrainState(train_state.TrainState):
 
 
 # def create_model(model_cls, config, **kwargs):
-def create_model(model_cls, config, pca_coef, **kwargs):
+def create_model(model_cls, config, pca_basis, **kwargs):
 
     # return model_cls(mesh_vertexes=config.vertex_num, dtype=jnp.float32)
 
-    return model_cls(mesh_vertexes=config.vertex_num,
-                     dtype=jnp.float32,
-                     pca_coef=pca_coef)
+    return model_cls(
+        mesh_vertexes=config.vertex_num,
+        dtype=jnp.float32,
+        pca_basis=pca_basis,
+        mean_mesh=get_mean_mesh(config.mean_mesh),
+    )
 
 
 def create_learning_rate_fn(config: ml_collections.ConfigDict,
@@ -200,33 +207,9 @@ def train_step(
             training=True,
             rngs={'dropout': dropout_train_key},
         )
-        # focal = jnp.concatenate([
-        #     batch['in_cam'][:, 0, 0].reshape(
-        #         (-1, 1)), batch['in_cam'][:, 1, 1].reshape(-1, 1)
-        # ],
-        #                         axis=1)
-        # princpt = jnp.concatenate([
-        #     batch['in_cam'][:, 0, 2].reshape(
-        #         (-1, 1)), batch['in_cam'][:, 1, 2].reshape(-1, 1)
-        # ],
-        #                           axis=1)
-        # pred_images = renderer.render(pred_vtx,
-        #                               batch['faces_uvs'],
-        #                               batch['verts_uvs'],
-        #                               batch['verts_idx'],
-        #                               batch['texture_image'],
-        #                               batch['head_pose'],
-        #                               batch['ex_cam'],
-        #                               focal,
-        #                               princpt,
-        #                               preprocess=True)
 
-        # real_kpts = kpt_detector.detect(
-        #     torch.from_dlpack(jdl.to_dlpack(batch['img'])))
-        # # pred_kpts = kpt_detector.detect(pred_images)
-
-        # loss = mean_square_error_loss(pred_kpts, real_kpts)
-        loss = chamfer_distance_loss(pred_vtx, batch['vtx'])
+        loss = mean_square_error_loss(pred_vtx, batch['vtx'])
+        # loss = chamfer_distance_loss(pred_vtx, batch['vtx'])
 
         return loss, pred_vtx
 
@@ -273,7 +256,7 @@ def train_and_evalutation(config: ml_collections.ConfigDict, workdir: str,
     )
 
     # model = create_model(model_cls, config)
-    model = create_model(model_cls, config, get_pca_coef(config.pca))
+    model = create_model(model_cls, config, get_pca_basis(config.pca))
     # face_render = Renderer(
     #     image_size=config.image_size,
     #     render_size=config.render_size,
@@ -333,7 +316,6 @@ def train_and_evalutation(config: ml_collections.ConfigDict, workdir: str,
 
     for step, batch in zip(range(step_offset, num_steps), train_iter):
 
-        
         state, metrics = p_train_step(state, batch)
 
         for h in hooks:
