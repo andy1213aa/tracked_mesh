@@ -26,13 +26,11 @@ import optax
 import models
 import pickle
 
-SCALE=192.89923
-
 def get_pca_basis(pca_pth):
 
     with open(pca_pth, 'rb') as f:
         pca_basis = pickle.load(f)
-    return pca_basis
+    return pca_basis.components_
 
 
 def get_mean_mesh(mean_mesh_pth):
@@ -52,7 +50,7 @@ def prepare_tf_data(xs):
 
         # reshape (host_batch_size, height, width, 3) to
         # (local_devices, device_batch_size, height, width, 3)
-
+   
         return x.reshape((local_device_count, -1) + x.shape[1:])
 
     return jax.tree_util.tree_map(_prepare, xs)
@@ -309,10 +307,6 @@ def train_and_evalutation(config: ml_collections.ConfigDict, workdir: str,
 
     logging.info('Initial compilation, this might take some minutes...')
 
-    # 開始計時
-    start_time = time.time()
-    # 初始化計數器
-    step_count = 0
 
     for step, batch in zip(range(step_offset, num_steps), train_iter):
 
@@ -325,7 +319,7 @@ def train_and_evalutation(config: ml_collections.ConfigDict, workdir: str,
 
         if config.get('log_every_steps'):
             train_metrics.append(metrics)
-
+            
             if (step + 1) % config.log_every_steps == 0:
                 train_metrics = common_utils.get_metrics(train_metrics)
                 summary = {

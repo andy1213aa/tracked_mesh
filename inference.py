@@ -18,6 +18,8 @@ import numpy as np
 import pickle
 from flax import jax_utils
 import time
+
+
 def load_obj(pth):
 
     def is_number(s):
@@ -52,7 +54,7 @@ def get_pca_coef(pca_pth):
 
     with open(pca_pth, 'rb') as f:
         pca = pickle.load(f)
-    return pca
+    return pca.components_
 
 
 def get_mean_mesh(mean_mesh_pth):
@@ -73,10 +75,13 @@ def inititalized(key, render_size, model):
 
     return variables
 
+
 def create_input_iter(ds):
     it = map(prepare_tf_data, ds)
     it = jax_utils.prefetch_to_device(it, 2)
     return it
+
+
 def create_model(model_cls, config, pca_coef, **kwargs):
 
     return model_cls(
@@ -85,6 +90,8 @@ def create_model(model_cls, config, pca_coef, **kwargs):
         pca_basis=pca_coef,
         mean_mesh=get_mean_mesh(config.mean_mesh),
     )
+
+
 def prepare_tf_data(xs):
     """Convert a input batch from tf Tensors to numpy arrays."""
     local_device_count = jax.local_device_count()
@@ -99,6 +106,7 @@ def prepare_tf_data(xs):
         return x.reshape((local_device_count, -1) + x.shape[1:])
 
     return jax.tree_util.tree_map(_prepare, xs)
+
 
 class TrainState(train_state.TrainState):
     # batch_stats: Any
@@ -168,103 +176,70 @@ def inference(
 
     state = restore_checkpoint(state, workdir)
 
-    subject = '6674443'
-    facial = 'E061_Lips_Puffed'  #'E001_Neutral_Eyes_Open'
-    view = '400002'
-    idx = '029397'  #'000220'
+    # subject = '6674443'
+    # facial = 'E061_Lips_Puffed'  #'E001_Neutral_Eyes_Open'
+    # view = '400002'
+    # idx = '029397'  #'000220'
 
-    
-    ds = readTFRECORD('../training_data/40002_top25images.tfrecord', config)
+    ds = readTFRECORD('../training_data/1015_18pose_664nums.tfrecord', config)
     train_iter = create_input_iter(ds)
-    
+
     count = 0
     mse = 0
     ex_time = 0
+
     num_steps = int(config.steps_per_epoch * config.num_epochs)
     for step, batch in zip(range(0, num_steps), train_iter):
-        
-        img = batch['img'][0][0]
-        
-        # print(type(img))
-        # cv2.imshow('test.png', img*255)
-        # cv2.waitKey(0)
-        # cv2.destroyAllWindows()
-        cv2.imwrite(f'test_{count}.png', jax.device_get(img)*255)
-        img = img.reshape((1, 512, 334, 1))
+
+        ######
+        img = cv2.imread(
+            '/media/aaron/work/KIRI/back_up_scan/P09_EYE_OPEN_SMILE/images_rvm/0021.png'
+        ).astype(np.float32)
+        img = cv2.resize(img, (756, 1008))
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        img /= 255.
+        ######
+
+        ######
+        # img = batch['img'][0][0]
+        ######
+        cv2.imwrite(f'test_{count}.png', jax.device_get(img) * 255)
+        img = img.reshape((1, 1008, 756, 1))
         vtx = batch['vtx'][0][0].reshape((7306, 3))
-    # subject = '6674443'
-    # facial = 'E001_Neutral_Eyes_Open'#'E001_Neutral_Eyes_Open'
-    # view = '400002'
-    # idx = '000220'#'000220'
-
-        # img = cv2.imread(
-        #     f'/home/aaron/Desktop/multiface/{subject}_GHS/images/{facial}/{view}/{idx}.png'
-        # )
-        # img = cv2.resize(img, (334, 512))
-        # img = cv2.cvtColor(img,
-        #                 cv2.COLOR_BGR2GRAY).reshape(config.render_size + (1, )).astype(np.float32)
-        # img = img.reshape((-1, ) + img.shape)
-        # img = jnp.asarray(img).astype(jnp.float32)
-        # image_mean = 47.727367
-        # image_std = 27.568207
-        # img = (img - image_mean) / image_std
-        # img /= 255.
-        # cv2.imwrite(f'test_{count}.png', img[0]*255)
-        dropout_train_key = jax.random.fold_in(key=dropout_key, data=state.step)
-        # print(img)
-        start = time.time()  
+        dropout_train_key = jax.random.fold_in(key=dropout_key,
+                                               data=state.step)
+        start = time.time()
         pred = state.apply_fn({'params': state.params},
-                            img,
-                            training=False,
-                            rngs={'dropout': dropout_train_key})
+                              img,
+                              training=False,
+                              rngs={'dropout': dropout_train_key})
         ex_t = time.time() - start
-    # # mean_mesh_pth = '/home/aaron/Desktop/multiface/6674443_GHS/geom/vert_mean.bin'
-    # # with open(mean_mesh_pth, 'rb') as f:
-    # #     data = f.read()
-    # #     mesh_mean = np.frombuffer(data, dtype=np.float32).reshape((7306, 3))
-    # #     center = mesh_mean.mean(0)
-
-    # # SCALE = np.max(np.abs(mesh_mean - center))
-        SCALE = 192.89923
         pred_cpu = jax.device_get(pred)
-        pred_cpu = einops.rearrange(pred_cpu, 'b (v c) -> (b v) c', c=3)  #b = 1
+        pred_cpu = einops.rearrange(pred_cpu, 'b (v c) -> (b v) c',
+                                    c=3)  #b = 1
         pred_cpu = pred_cpu.copy()
-        pred_cpu *= SCALE
 
-    # # res, vertex_true = load_obj(
-    # #     f'/home/aaron/Desktop/multiface/{subject}_GHS/geom/tracked_mesh/{facial}/{idx}.obj'
-    # # )
-
-    # with open(
-    #         Path(
-    #             f'/home/aaron/Desktop/multiface/{subject}_GHS/geom/tracked_mesh/{facial}/{idx}.bin'
-    #         ),
-    #         'rb',
-    # ) as f:
-    #     data = f.read()
-    # vertex_true = np.frombuffer(data, dtype=np.float32).reshape((-1, 3))
-
-        print(np.mean((vtx*SCALE - pred_cpu)**2))
+        print(np.mean((vtx - pred_cpu)**2))
         print(f'EX_time: {ex_t:0.5f}')
-        mse +=np.mean((vtx*SCALE - pred_cpu)**2)
-        
-        if count> 0:
+        mse += np.mean((vtx - pred_cpu)**2)
+
+        if count > 0:
             ex_time += ex_t
-        
-        
 
         obj_v_result = [f'v {x} {y} {z}\n' for x, y, z in pred_cpu]
         obj_v_result = np.array(obj_v_result)
 
+        #讀進所有的v, vt, f
         total_lines = 0
         with open(
-                f'/home/aaron/Desktop/multiface/{subject}_GHS/geom/tracked_mesh/{facial}/{idx}.obj',
+                f'/media/aaron/work/KIRI/ME_1015/P11_MOUTH_RIGHT/model_align.obj',
                 'r') as f:
             total_lines = len(f.readlines())
 
         txt = ''
+        #只改v，其他不因obj不同而改變
         with open(
-                f'/home/aaron/Desktop/multiface/{subject}_GHS/geom/tracked_mesh/{facial}/{idx}.obj',
+                f'/media/aaron/work/KIRI/ME_1015/P11_MOUTH_RIGHT/model_align.obj',
                 'r') as f:
             for i in range(7306):
                 f.readline()
@@ -273,14 +248,14 @@ def inference(
 
                 txt += f.readline()
         # with open('../test_data/test.obj', 'w') as w:
+
         with open(f'test_{count}.obj', 'w') as w:
             w.write(txt)
-            
+
         if count == 100:
             print(f'Average Mean-Square-Error: {mse/count:0.5f}mm.')
             print(f'Average Execution-Time: {ex_time/count:0.5f}s.')
             break
-        count+=1
-        # break
-    # with open(f'{idx}.obj', 'w') as f:
-    #     f.writelines(obj_v_result)
+        count += 1
+
+        break

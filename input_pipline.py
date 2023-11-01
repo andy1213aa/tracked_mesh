@@ -13,7 +13,7 @@ image_std = 30.329227
 #     center = mesh_mean.mean(0)
 
 # SCALE = np.max(np.abs(mesh_mean - center))
-SCALE=192.89923
+
 
 def readTFRECORD(tfrecord_pth: str,
                  config: ml_collections.ConfigDict) -> tf.data:
@@ -24,8 +24,8 @@ def readTFRECORD(tfrecord_pth: str,
     data_set = tf.data.TFRecordDataset(tfrecord_pth)
 
 
-    IMAGE_WIDTH = config.render_size[1]
-    IMAGE_HEIGHT = config.render_size[0]
+    IMAGE_WIDTH = config.render_size[0]
+    IMAGE_HEIGHT = config.render_size[1]
     NUM_VERTEX = config.vertex_num
 
     data_set = (data_set
@@ -34,7 +34,7 @@ def readTFRECORD(tfrecord_pth: str,
             .repeat()
             .batch(config.batch_size, drop_remainder=True)
             # .cache()
-            # .map(augment_using_ops,  num_parallel_calls=AUTOTUNE)
+            .map(augment_using_ops,  num_parallel_calls=AUTOTUNE)
             .prefetch(buffer_size=AUTOTUNE)
         )
 
@@ -44,11 +44,10 @@ def readTFRECORD(tfrecord_pth: str,
 
 def augment_using_ops(batch):
 
-    # batch['img'] = tf.image.random_brightness(batch['img'], 0.2)
-    # batch['img'] = tf.keras.layers.RandomZoom(0.2)(batch['img'])
-    # batch['img'] = tf.keras.layers.RandomRotation(0.1)(batch['img'])
+    batch['img'] = tf.image.random_brightness(batch['img'], 0.2)
+    batch['img'] = tf.keras.layers.RandomZoom(0.2)(batch['img'])
+    batch['img'] = tf.keras.layers.RandomRotation(0.1)(batch['img'])
     
-    # images = tf.image.rot90(images)
     return batch
 
 
@@ -96,7 +95,7 @@ def parse(example_proto):
     # img = (img - image_mean) / image_std
     img /= 255.
     vtx = tf.reshape(vtx, [NUM_VERTEX*3])
-    vtx /= SCALE
+    # vtx /= SCALE
     # tex = tf.reshape(tex, [1024, 1024, 3])
     # vtx_mean = tf.reshape(vtx_mean, [NUM_VERTEX, 3])
     # verts_uvs = tf.reshape(verts_uvs, [-1, 2])

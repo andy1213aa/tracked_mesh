@@ -1,3 +1,4 @@
+from absl import logging
 import jax.numpy as jnp
 from flax import linen as nn
 from jax.nn.initializers import zeros, constant
@@ -99,7 +100,7 @@ class CNN(nn.Module):
     mesh_vertexes: int
     # pca_coef: jnp.array
     pca_basis: jnp.array
-    mean_mesh : jnp.array
+    mean_mesh: jnp.array
     dtype: Any = jnp.float32
     conv: ModuleDef = nn.Conv
 
@@ -111,36 +112,58 @@ class CNN(nn.Module):
                        kernel_init=nn.initializers.lecun_uniform())
 
         for i, filters in enumerate(self.num_filters):
-            x = conv(filters, (3, 3), self.num_strides[i], name=f'conv{i}')(x)
+            x = conv(filters, (3, 3), self.num_strides[i], name=f'conv_{str(i).zfill(2)}')(x)
             x = nn.relu(x)
-            if i % 2 == 0:
-                x = nn.max_pool(x, window_shape=(2, 2), strides=(2, 2))
+            # if i % 2 == 0:
+            #     x = nn.max_pool(x, window_shape=(2, 2), strides=(2, 2))
         # x = einops.rearrange(x, 'b h w c -> b (h w c)')
         # Set the dropout layer with a `rate` of 80%.
         # When the `deterministic` flag is `True`, dropout is turned off.
-      
         x = nn.Dropout(rate=0.2)(x, deterministic=not training)
-       
-        x = nn.Dense(52)(x)
-       
+        x = nn.Dense(18)(x)
         x = einops.rearrange(x, 'b h w c -> b (h w c)')
         # x = einops.rearrange(x, 'b h w c -> b (h w c)')
-        x = nn.Dense(52,
+
+        x = nn.Dense(18,
                      # kernel_init=constant(jnp.array(self.pca_coef)),
                      )(x)
         # self.pca_coef = x
         x = jnp.matmul(x, self.pca_basis)
         x = jnp.add(self.mean_mesh, x)
         # x = einops.rearrange(x, 'b (n c) -> b n c', n=7306, c=3)
-    
+
         return x
 
 
-Classic_CNN = partial(
-    CNN,
-    num_filters=[64, 64, 96, 96, 144, 144, 216, 216, 324, 324, 486, 486],
-    num_strides=[(1, 1), (1, 1), (1, 1), (1, 1), (1, 1), (1, 1), (1, 1),
-                 (1, 1), (1, 1), (1, 1), (1, 1), (1, 1)])
+Classic_CNN = partial(CNN,
+                      num_filters=[
+                          64,
+                          64,
+                          96,
+                          96,
+                          144,
+                          144,
+                          216,
+                          216,
+                          324,
+                          324,
+                          486,
+                          486,
+                      ],
+                      num_strides=[
+                          (2, 2),
+                          (1, 1),
+                          (2, 2),
+                          (1, 1),
+                          (2, 2),
+                          (1, 1),
+                          (2, 2),
+                          (1, 1),
+                          (2, 2),
+                          (1, 1),
+                          (2, 2),
+                          (1, 1),
+                      ])
 
 # Classic_UNet = partial(VertexUNet,
 #                        enconding_units=[512, 256, 128],
